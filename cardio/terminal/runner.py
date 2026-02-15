@@ -1,10 +1,11 @@
 import os
 import sys
-from typing import List, Optional, Callable
+from typing import Dict, List, Optional, Callable
 
 from .config import TerminalConfig
 from .factory import TerminalLauncherFactory, TerminalNotFoundError
 from .detection import TerminalEnvironmentDetector
+from .launcher import TerminalLauncher
 
 
 class TerminalRunner:
@@ -22,15 +23,12 @@ class TerminalRunner:
 
     def should_relaunch(self) -> bool:
         """Determine if we need to relaunch in a new terminal."""
-        # Already launched by us
         if self.detector.is_launched_by_cardio():
             return False
         
-        # On Windows, avoid cmd.exe for emoji support
         if sys.platform == "win32" and self.detector.is_cmd_exe():
             return True
         
-        # Check terminal size requirements
         if not self.detector.meets_minimum_size():
             return True
         
@@ -60,59 +58,29 @@ class TerminalRunner:
             self._configure_environment()
             main_func()
 
+    def _build_child_environment(self) -> Dict[str, str]:
+        """Build environment variables for the child process.
+        
+        Creates a copy of the current environment and adds the marker
+        variable to prevent infinite relaunch loops.
+        """
+        env = os.environ.copy()
+        env[TerminalEnvironmentDetector.LAUNCHED_ENV_VAR] = "1"
+        return env
+
     def _launch_external(
-        self, launcher, script_path: str, script_args: List[str]
+        self, launcher: TerminalLauncher, script_path: str, script_args: List[str]
     ) -> None:
         """Launch the script in an external terminal."""
-        # Set environment variable so the new process knows it was launched by us
-        env_script = self._create_env_wrapper_script(script_path, script_args)
+        env = self._build_child_environment()
         
         print(f"Launching in {launcher.get_terminal_name()}...")
-        process = launcher.launch(env_script, script_args)
+        launcher.launch(script_path, script_args, env=env)
         
-        # Exit this process - the new terminal will run the game
         sys.exit(0)
-
-    def _create_env_wrapper_script(
-        self, script_path: str, script_args: List[str]
-    ) -> str:
-        """Return the script path, environment will be set via subprocess."""
-        # We'll set the environment variable in the command itself
-        os.environ[TerminalEnvironmentDetector.LAUNCHED_ENV_VAR] = "1"
-        return script_path
 
     def _configure_environment(self) -> None:
         """Configure the current terminal environment."""
         if sys.platform == "win32":
             from .platforms.windows import WindowsTerminalEnvironmentConfigurator
             WindowsTerminalEnvironmentConfigurator.configure_all()
-
-
-class TerminalRunnerBuilder:
-    """Builder for creating configured TerminalRunner instances."""
-
-    def __init__(self):
-        self._config: Optional[TerminalConfig] = None
-        self._detector: Optional[TerminalEnvironmentDetector] = None
-        self._factory: Optional[TerminalLauncherFactory] = None
-
-    def with_config(self, config: TerminalConfig) -> "TerminalRunnerBuilder":
-        self._config = config
-        return self
-
-    def with_detector(
-        self, detector: TerminalEnvironmentDetector
-    ) -> "TerminalRunnerBuilder":
-        self._detector = detector
-        return self
-
-    def with_factory(self, factory: TerminalLauncherFactory) -> "TerminalRunnerBuilder":
-        self._factory = factory
-        return self
-
-    def build(self) -> TerminalRunner:
-        return TerminalRunner(
-            config=self._config,
-            detector=self._detector,
-            factory=self._factory,
-        )

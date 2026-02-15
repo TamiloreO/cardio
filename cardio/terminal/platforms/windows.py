@@ -1,6 +1,8 @@
+import os
 import shutil
+import subprocess
 import sys
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from ..launcher import TerminalLauncher
 from ..config import TerminalConfig
@@ -10,7 +12,8 @@ class WindowsTerminalLauncher(TerminalLauncher):
     """Launcher for Windows Terminal (wt.exe).
     
     Uses Windows Terminal instead of cmd.exe because cmd does not properly
-    render Unicode characters and emojis.
+    render Unicode characters and emojis. Environment variables are passed
+    explicitly to the subprocess to ensure reliable propagation.
     """
 
     EXECUTABLE = "wt.exe"
@@ -44,6 +47,22 @@ class WindowsTerminalLauncher(TerminalLauncher):
 
         return command
 
+    def launch(
+        self,
+        script_path: str,
+        script_args: Optional[List[str]] = None,
+        env: Optional[Dict[str, str]] = None,
+    ) -> subprocess.Popen:
+        """Launch the script in Windows Terminal.
+        
+        Environment variables are passed explicitly via the env parameter
+        to ensure they are inherited by the child process.
+        """
+        args = script_args or []
+        command = self.build_launch_command(script_path, args)
+        effective_env = env if env is not None else os.environ.copy()
+        return subprocess.Popen(command, env=effective_env)
+
     def supports_unicode(self) -> bool:
         return True
 
@@ -60,7 +79,6 @@ class WindowsTerminalEnvironmentConfigurator:
         if sys.platform != "win32":
             return
 
-        import io
         if hasattr(sys.stdout, 'reconfigure'):
             sys.stdout.reconfigure(encoding='utf-8')
         if hasattr(sys.stderr, 'reconfigure'):
@@ -86,44 +104,6 @@ class WindowsTerminalEnvironmentConfigurator:
             
             new_mode = mode.value | ENABLE_VIRTUAL_TERMINAL_PROCESSING | ENABLE_PROCESSED_OUTPUT
             kernel32.SetConsoleMode(handle, new_mode)
-            return True
-        except Exception:
-            return False
-
-    @staticmethod
-    def set_console_font() -> bool:
-        """Attempt to set a font that supports emoji rendering."""
-        if sys.platform != "win32":
-            return False
-
-        try:
-            import ctypes
-            
-            LF_FACESIZE = 32
-            STD_OUTPUT_HANDLE = -11
-
-            class CONSOLE_FONT_INFOEX(ctypes.Structure):
-                _fields_ = [
-                    ("cbSize", ctypes.c_ulong),
-                    ("nFont", ctypes.c_ulong),
-                    ("dwFontSize", ctypes.c_long * 2),
-                    ("FontFamily", ctypes.c_uint),
-                    ("FontWeight", ctypes.c_uint),
-                    ("FaceName", ctypes.c_wchar * LF_FACESIZE)
-                ]
-
-            font = CONSOLE_FONT_INFOEX()
-            font.cbSize = ctypes.sizeof(CONSOLE_FONT_INFOEX)
-            font.nFont = 0
-            font.dwFontSize[0] = 0
-            font.dwFontSize[1] = 16
-            font.FontFamily = 54  # FF_MODERN | FIXED_PITCH
-            font.FontWeight = 400
-            font.FaceName = "Cascadia Code"
-
-            kernel32 = ctypes.windll.kernel32
-            handle = kernel32.GetStdHandle(STD_OUTPUT_HANDLE)
-            kernel32.SetCurrentConsoleFontEx(handle, False, ctypes.byref(font))
             return True
         except Exception:
             return False

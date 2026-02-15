@@ -1,14 +1,19 @@
 import os
-import shutil
+import subprocess
 import sys
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from ..launcher import TerminalLauncher
 from ..config import TerminalConfig
 
 
 class MacOSTerminalLauncher(TerminalLauncher):
-    """Launcher for macOS Terminal.app and iTerm2."""
+    """Launcher for macOS Terminal.app and iTerm2.
+    
+    Uses AppleScript to launch terminal applications. Environment variables
+    are exported in the shell command to ensure they are available in the
+    new terminal session.
+    """
 
     def __init__(self, config: Optional[TerminalConfig] = None):
         super().__init__(config)
@@ -18,12 +23,10 @@ class MacOSTerminalLauncher(TerminalLauncher):
         if sys.platform != "darwin":
             return False
         
-        # Check for iTerm2 first (better emoji support)
         if os.path.exists("/Applications/iTerm.app"):
             self._terminal_type = "iterm"
             return True
         
-        # Fall back to Terminal.app
         if os.path.exists("/Applications/Utilities/Terminal.app"):
             self._terminal_type = "terminal"
             return True
@@ -35,13 +38,40 @@ class MacOSTerminalLauncher(TerminalLauncher):
             return "iTerm2"
         return "Terminal.app"
 
-    def build_launch_command(self, script_path: str, script_args: List[str]) -> List[str]:
+    def _build_env_exports(self, env: Dict[str, str]) -> str:
+        """Build shell export statements for environment variables."""
+        from ..detection import TerminalEnvironmentDetector
+        marker_var = TerminalEnvironmentDetector.LAUNCHED_ENV_VAR
+        if marker_var in env:
+            return f'export {marker_var}="{env[marker_var]}"; '
+        return ""
+
+    def build_launch_command(
+        self, script_path: str, script_args: List[str], env_exports: str = ""
+    ) -> List[str]:
         args_str = " ".join(f'"{arg}"' for arg in script_args) if script_args else ""
-        python_cmd = f'"{sys.executable}" "{script_path}" {args_str}'.strip()
+        python_cmd = f'{env_exports}"{sys.executable}" "{script_path}" {args_str}'.strip()
 
         if self._terminal_type == "iterm":
             return self._build_iterm_command(python_cmd)
         return self._build_terminal_app_command(python_cmd)
+
+    def launch(
+        self,
+        script_path: str,
+        script_args: Optional[List[str]] = None,
+        env: Optional[Dict[str, str]] = None,
+    ) -> subprocess.Popen:
+        """Launch the script in a macOS terminal.
+        
+        Environment variables are passed by embedding export statements
+        in the shell command, since AppleScript launches a new shell session.
+        """
+        args = script_args or []
+        effective_env = env if env is not None else os.environ.copy()
+        env_exports = self._build_env_exports(effective_env)
+        command = self.build_launch_command(script_path, args, env_exports)
+        return subprocess.Popen(command, env=effective_env)
 
     def _build_iterm_command(self, python_cmd: str) -> List[str]:
         maximize_script = ""

@@ -1,7 +1,8 @@
 import os
 import shutil
+import subprocess
 import sys
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from ..launcher import TerminalLauncher
 from ..config import TerminalConfig
@@ -11,10 +12,10 @@ class LinuxTerminalLauncher(TerminalLauncher):
     """Launcher for Linux terminal emulators.
     
     Supports multiple terminal emulators in order of preference for
-    Unicode/emoji support.
+    Unicode/emoji support. Environment variables are passed explicitly
+    to subprocess.Popen to ensure reliable inheritance.
     """
 
-    # Terminal emulators in order of preference (better unicode support first)
     TERMINAL_PREFERENCES: List[Tuple[str, str]] = [
         ("kitty", "Kitty"),
         ("alacritty", "Alacritty"),
@@ -59,8 +60,23 @@ class LinuxTerminalLauncher(TerminalLauncher):
         )
         return builder.build()
 
+    def launch(
+        self,
+        script_path: str,
+        script_args: Optional[List[str]] = None,
+        env: Optional[Dict[str, str]] = None,
+    ) -> subprocess.Popen:
+        """Launch the script in a Linux terminal emulator.
+        
+        Environment variables are passed explicitly via the env parameter
+        to ensure they are inherited by the child process.
+        """
+        args = script_args or []
+        command = self.build_launch_command(script_path, args)
+        effective_env = env if env is not None else os.environ.copy()
+        return subprocess.Popen(command, env=effective_env)
+
     def supports_unicode(self) -> bool:
-        # Most modern Linux terminals support unicode well
         return self._terminal_executable not in ("xterm",)
 
     def supports_maximized(self) -> bool:

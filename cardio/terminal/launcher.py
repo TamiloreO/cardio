@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import List, Optional
+from typing import Dict, List, Optional
+import os
 import subprocess
 import sys
 
@@ -27,11 +28,27 @@ class TerminalLauncher(ABC):
         """Return the human-readable name of this terminal."""
         pass
 
-    def launch(self, script_path: str, script_args: Optional[List[str]] = None) -> subprocess.Popen:
-        """Launch the script in this terminal."""
+    def launch(
+        self,
+        script_path: str,
+        script_args: Optional[List[str]] = None,
+        env: Optional[Dict[str, str]] = None,
+    ) -> subprocess.Popen:
+        """Launch the script in this terminal.
+        
+        Args:
+            script_path: Path to the Python script to execute.
+            script_args: Command line arguments to pass to the script.
+            env: Environment variables to pass to the subprocess. If None,
+                 inherits the current process environment via os.environ.copy().
+        
+        Returns:
+            The Popen object for the launched subprocess.
+        """
         args = script_args or []
         command = self.build_launch_command(script_path, args)
-        return subprocess.Popen(command)
+        effective_env = env if env is not None else os.environ.copy()
+        return subprocess.Popen(command, env=effective_env)
 
     def supports_unicode(self) -> bool:
         """Check if this terminal supports unicode/emoji rendering."""
