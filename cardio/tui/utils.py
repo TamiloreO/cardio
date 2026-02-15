@@ -8,7 +8,10 @@ from asciimatics.screen import Screen
 from asciimatics.effects import Print
 from asciimatics.renderers import StaticRenderer, Box, Renderer
 from asciimatics.event import KeyboardEvent
-from asciimatics.constants import SINGLE_LINE
+try:
+    from asciimatics.constants import SINGLE_LINE
+except ImportError:
+    SINGLE_LINE = 1  # Fallback for older asciimatics versions
 from .constants import *
 from .bufferutils import BufferCopy
 from cardio import GridPos
