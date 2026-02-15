@@ -1,5 +1,29 @@
 import logging
 import argparse
+import sys
+from cardio.terminal_launcher import should_launch_external, launch_in_external_terminal
+
+# ----- command line arguments -----
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--reset", action="store_true", help="Delete save files")
+parser.add_argument("--human-name", action="store", help="Set human player's name")
+parser.add_argument(
+    "--no-external",
+    action="store_true",
+    help="Don't launch in external terminal (run in current terminal)"
+)
+args = parser.parse_args()
+
+# Launch in external terminal if not already there
+if not args.no_external and should_launch_external():
+    forward_args = []
+    if args.reset:
+        forward_args.append("--reset")
+    if args.human_name:
+        forward_args.extend(["--human-name", args.human_name])
+    sys.exit(launch_in_external_terminal(forward_args))
+
 from cardio import HumanPlayer
 from cardio.run import Run
 from cardio.tui.mapview import TUIMapView
@@ -10,14 +34,6 @@ import cardio.blueprints
 from cardio import jason
 
 logging.basicConfig(level=logging.DEBUG)
-
-
-# ----- command line arguments -----
-
-parser = argparse.ArgumentParser()
-parser.add_argument("--reset", action="store_true", help="Delete save files")
-parser.add_argument("--human-name", action="store", help="Set human player's name")
-args = parser.parse_args()
 
 if args.reset:
     jason.reset_all()
