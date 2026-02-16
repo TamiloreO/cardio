@@ -1,9 +1,12 @@
 import logging
 import argparse
 import sys
+from datetime import datetime
+from pathlib import Path
+from platformdirs import user_data_path
 from cardio import HumanPlayer
 from cardio.run import Run
-from cardio.tui.mapview import TUIMapView
+from cardio.tui.mapview import TUIMapView, QuitToMenu
 from cardio.tui.mainmenu import MainMenu, MenuChoice
 from cardio.locations.location_directory import view_directory
 # FIXME For some reason, we need to import blueprints here, otherwise jason will
@@ -11,7 +14,23 @@ from cardio.locations.location_directory import view_directory
 import cardio.blueprints
 from cardio import jason
 
-logging.basicConfig(level=logging.DEBUG)
+
+# ----- logging setup -----
+
+LOG_DIR = user_data_path("cardio") / "logs"
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+LOG_FILE = LOG_DIR / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[
+        logging.FileHandler(LOG_FILE, encoding="utf-8"),
+        logging.StreamHandler(sys.stderr),
+    ],
+)
+logger = logging.getLogger(__name__)
+logger.info(f"Logging to {LOG_FILE}")
 
 
 # ----- command line arguments -----
@@ -31,7 +50,7 @@ def check_save_exists() -> bool:
     try:
         jason.load_all()
         return True
-    except FileNotFoundError:
+    except (FileNotFoundError, AssertionError):
         return False
 
 
@@ -47,23 +66,27 @@ while True:
     choice = show_main_menu()
 
     if choice == MenuChoice.EXIT:
+        logger.info("User exited game")
         sys.exit(0)
 
     if choice == MenuChoice.NEW_GAME:
+        logger.info("Starting new game")
         jason.reset_all()
         humanplayer = HumanPlayer.create_new("You")
         run = None
     elif choice == MenuChoice.CONTINUE:
         try:
             humanplayer, run = jason.load_all()
-        except FileNotFoundError:
-            logging.debug("No save file found. Starting new game")
+            logger.info("Loaded existing game")
+        except (FileNotFoundError, AssertionError):
+            logger.debug("No save file found. Starting new game")
             humanplayer = HumanPlayer.create_new("You")
             run = None
 
     if args.human_name:
         humanplayer.name = args.human_name
 
+    quit_to_menu = False
     while True:  # Forever start new runs:
         if not run or not run.is_on:
             run = Run()
@@ -81,13 +104,20 @@ while True:
 
         jason.save_all(humanplayer, run)
 
-        while run.is_on:  # Visit locations in run:
-            chosen_loc = mapview.get_next_location()
-            mapview.move_to(chosen_loc)
-            run.move_to(chosen_loc)
-            view = view_directory[type(chosen_loc)]  # type: ignore
-            run.is_on = chosen_loc.handle(view, humanplayer)
+        try:
+            while run.is_on:  # Visit locations in run:
+                chosen_loc = mapview.get_next_location()
+                mapview.move_to(chosen_loc)
+                run.move_to(chosen_loc)
+                view = view_directory[type(chosen_loc)]  # type: ignore
+                run.is_on = chosen_loc.handle(view, humanplayer)
+                jason.save_all(humanplayer, run)
+        except QuitToMenu:
+            logger.info("User quit to main menu")
             jason.save_all(humanplayer, run)
+            mapview.close()
+            quit_to_menu = True
+            break
 
         # Run is over:
         mapview.message("Game over! 🥴 For this run. Try another run. 🎮")
@@ -99,3 +129,6 @@ while True:
             humanplayer.collection.add_card(card)
         humanplayer.deck.cards = []
         break  # Return to main menu after a run ends
+
+    if quit_to_menu:
+        continue  # Go back to main menu loop

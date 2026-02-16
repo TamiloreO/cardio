@@ -4,14 +4,58 @@ from enum import Enum, auto
 from asciimatics.renderers import FigletText
 from asciimatics.screen import Screen
 from .tuibase import TUIBaseMixin
-from .utils import show_text, show, dPos, get_keycode
-from .constants import Color
+from .utils import show_text, show, dPos, get_keycode, show_box
+from .constants import Color, BOX_WIDTH, BOX_HEIGHT
 
 
 class MenuChoice(Enum):
     CONTINUE = auto()
     NEW_GAME = auto()
     EXIT = auto()
+
+
+def show_confirmation_dialog(screen: Screen, message: str) -> bool:
+    """Show a confirmation dialog and return True if confirmed, False otherwise."""
+    options = ["Yes", "No"]
+    cursor = 1  # Default to "No"
+
+    # Dialog dimensions
+    dialog_width = max(len(message) + 8, 30)
+    dialog_height = 7
+    dialog_x = (screen.width - dialog_width) // 2
+    dialog_y = (screen.height - dialog_height) // 2
+
+    while True:
+        # Draw dialog box
+        show_box(screen, dPos(dialog_x, dialog_y), dialog_width, dialog_height, Color.YELLOW)
+
+        # Draw message
+        msg_x = dialog_x + (dialog_width - len(message)) // 2
+        show_text(screen, dPos(msg_x, dialog_y + 2), message, Color.WHITE)
+
+        # Draw options
+        options_y = dialog_y + 4
+        for i, opt in enumerate(options):
+            if i == cursor:
+                text = f"> {opt} <"
+                color = Color.YELLOW
+            else:
+                text = f"  {opt}  "
+                color = Color.WHITE
+            opt_x = dialog_x + (dialog_width // 4) * (i * 2 + 1) - len(text) // 2
+            show_text(screen, dPos(opt_x, options_y), text, color)
+
+        screen.refresh()
+
+        keycode = get_keycode(screen)
+        if keycode == Screen.KEY_LEFT:
+            cursor = 0
+        elif keycode == Screen.KEY_RIGHT:
+            cursor = 1
+        elif keycode == 13:  # Enter
+            return cursor == 0  # True if "Yes" selected
+        elif keycode == 27:  # Escape
+            return False
 
 
 class MainMenu(TUIBaseMixin):
@@ -69,5 +113,12 @@ class MainMenu(TUIBaseMixin):
             elif keycode == Screen.KEY_DOWN:
                 cursor = (cursor + 1) % len(menu_items)
             elif keycode == 13:  # Enter
+                selected_choice = menu_items[cursor][1]
+
+                # Confirm overwrite if selecting New Game with existing save
+                if selected_choice == MenuChoice.NEW_GAME and self.has_save:
+                    if not show_confirmation_dialog(self.screen, "Overwrite existing save?"):
+                        continue  # User cancelled, go back to menu
+
                 self.close()
-                return menu_items[cursor][1]
+                return selected_choice
