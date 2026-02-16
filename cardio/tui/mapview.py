@@ -7,6 +7,7 @@ from ..locations.location import Location
 from .constants import Color
 from .agent_primitives import HumanStateWidget
 from .tuibase import TUIBaseMixin
+from .helpview import show_help
 
 
 class TUIMapView(TUIBaseMixin):
@@ -79,6 +80,12 @@ class TUIMapView(TUIBaseMixin):
             f"Seed: {self.run.base_seed}",
             color=Color.GRAY,
         )
+        show_text(
+            self.screen,
+            self.GAMEINFO + (0, 4),
+            "Press H for Help/Tutorial",
+            color=Color.GRAY,
+        )
 
         if self.debug:
             show_screen_resolution(self.screen)
@@ -96,6 +103,8 @@ class TUIMapView(TUIBaseMixin):
                 cursor = max(0, cursor - 1)
             elif keycode == Screen.KEY_RIGHT:
                 cursor = min(len(possible_locations) - 1, cursor + 1)
+            elif keycode in (ord('h'), ord('H')):
+                show_help(self.screen)
         return possible_locations[cursor]
 
     def move_to(self, loc: Location) -> None:

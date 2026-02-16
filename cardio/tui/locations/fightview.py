@@ -20,6 +20,7 @@ from ..card_primitives import (
     clear_card,
     flash_card,
 )
+from ..helpview import show_help
 from ..decks_primitives import (
     show_card_to_handdeck,
     show_drawdeck_cursor,
@@ -196,13 +197,16 @@ class TUIFightVnC(TUIBaseMixin, FightVnC):
 
     def handle_human_plays_cards(self, place_card_callback: Callable) -> None:
         """Human player picks a card from the hand to play. Also handles I key for
-        inventory and C to end the turn and start next round of the fight.
+        inventory, H for help, and C to end the turn and start next round of the fight.
         """
         cursor = 0  # Cursor within hand deck
         while True:
             keycode = get_keycode(self.screen)
             if keycode in (ord("i"), ord("I")):
                 pass  # FIXME Inventory!
+            elif keycode in (ord("h"), ord("H")):
+                show_help(self.screen)
+                self.redraw_view()
             elif keycode in (ord("c"), ord("C")):
                 break
 
