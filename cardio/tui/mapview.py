@@ -2,11 +2,17 @@ from typing import Optional
 from asciimatics.screen import Screen
 from cardio.human_player import HumanPlayer
 from .utils import show_screen_resolution, get_keycode, show_text, dPos
+from .dialogs import show_confirmation_dialog
 from ..run import Run
 from ..locations.location import Location
 from .constants import Color
 from .agent_primitives import HumanStateWidget
 from .tuibase import TUIBaseMixin
+
+
+class QuitToMenuException(Exception):
+    """Raised when player chooses to quit to main menu."""
+    pass
 
 
 class TUIMapView(TUIBaseMixin):
@@ -17,6 +23,7 @@ class TUIMapView(TUIBaseMixin):
     def __init__(self, run: Run, humanplayer: HumanPlayer, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.run = run
+        self.humanplayer = humanplayer
         self.humanstate = HumanStateWidget(self.screen, humanplayer, self.AGENTINFO)
 
     def dpos_from_location(self, loc: Location) -> dPos:
@@ -79,6 +86,12 @@ class TUIMapView(TUIBaseMixin):
             f"Seed: {self.run.base_seed}",
             color=Color.GRAY,
         )
+        show_text(
+            self.screen,
+            self.GAMEINFO + (0, 5),
+            "[Q] Quit to menu",
+            color=Color.GRAY,
+        )
 
         if self.debug:
             show_screen_resolution(self.screen)
@@ -96,6 +109,9 @@ class TUIMapView(TUIBaseMixin):
                 cursor = max(0, cursor - 1)
             elif keycode == Screen.KEY_RIGHT:
                 cursor = min(len(possible_locations) - 1, cursor + 1)
+            elif keycode == ord('q') or keycode == ord('Q'):
+                if show_confirmation_dialog(self.screen, "Return to main menu?"):
+                    raise QuitToMenuException()
         return possible_locations[cursor]
 
     def move_to(self, loc: Location) -> None:

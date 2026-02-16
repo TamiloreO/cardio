@@ -5,6 +5,7 @@ from asciimatics.renderers import FigletText
 from asciimatics.screen import Screen
 from .tuibase import TUIBaseMixin
 from .utils import show_text, show, dPos, get_keycode
+from .dialogs import show_confirmation_dialog
 from .constants import Color
 
 
@@ -69,5 +70,12 @@ class MainMenu(TUIBaseMixin):
             elif keycode == Screen.KEY_DOWN:
                 cursor = (cursor + 1) % len(menu_items)
             elif keycode == 13:  # Enter
+                selected_choice = menu_items[cursor][1]
+                # Confirm overwrite if starting new game with existing save
+                if selected_choice == MenuChoice.NEW_GAME and self.has_save:
+                    if not show_confirmation_dialog(
+                        self.screen, "Overwrite existing save?"
+                    ):
+                        continue  # Go back to menu
                 self.close()
-                return menu_items[cursor][1]
+                return selected_choice
