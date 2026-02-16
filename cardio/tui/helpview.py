@@ -1,204 +1,50 @@
 """Help/Tutorial View with pagination support."""
 
+from pathlib import Path
 from typing import List, Tuple
+import yaml
 from asciimatics.screen import Screen
+
+from cardio.skills import get_skilltypes
 from .utils import show_text, get_keycode, dPos
 from .constants import Color
 
 
-HELP_SECTIONS: List[Tuple[str, str]] = [
-    ("Overview", """\
-CARDIO - Card Battle Game
-=========================
+def _generate_skills_content() -> str:
+    """Generate skills section dynamically from registered skill types."""
+    lines = [
+        "SKILLS - Special Abilities",
+        "==========================",
+        "",
+        "Cards can have special skills shown as emoji symbols:",
+        "",
+    ]
+    for skill_cls in get_skilltypes():
+        skill = skill_cls()
+        # Truncate description to fit on screen
+        desc = skill.description.split('.')[0]  # First sentence only
+        lines.append(f"  {skill.symbol} {skill.name:14} - {desc}")
+    
+    lines.extend(["", "Skills can combine in interesting ways - experiment!"])
+    return "\n".join(lines)
 
-Welcome to Cardio! This is a card battling game where you fight against
-computer opponents using a deck of creature cards.
 
-Your goal is to survive as many fights as possible, building up your
-deck and resources along the way.
-
-Navigation:
-  Arrow Keys  - Move cursor / Navigate
-  Enter       - Confirm selection
-  Escape      - Cancel / Go back
-  H           - Open this help (from map view)
-  $           - Emergency exit (anytime)
-"""),
-
-    ("Cards Basics", """\
-CARDS - Basic Attributes
-========================
-
-Each card has the following basic attributes:
-
-  💪 Power    - How much damage the card deals when attacking
-  💓 Health   - How much damage the card can take before dying
-
-Cards are displayed in boxes showing:
-  - Name at the top
-  - Power (💪) and Health (💓) symbols
-  - Skills as emoji symbols
-  - Cost and resource info at the bottom (for your cards)
-
-During a fight, your cards attack the opposing cards. If there's no
-opposing card, the attack hits the opponent directly!
-"""),
-
-    ("Fire & Spirits", """\
-FIRE & SPIRITS - Card Resources
-===============================
-
-Cards have TWO types of resources for playing them:
-
-🔥 FIRE (costs_fire / has_fire)
-  - Some cards COST fire to play (shown in bottom-right: 🔥)
-  - To pay fire cost, you must SACRIFICE other cards on your field
-  - Each card HAS a fire value (usually 1) shown in bottom-left
-  - Sacrifice enough cards to meet the fire cost
-
-👻 SPIRITS (costs_spirits / has_spirits)  
-  - Some cards COST spirits to play (shown in bottom-right: 👻)
-  - Spirits come from your spirit pool (shown in player stats)
-  - When your cards DIE, they add spirits to your pool
-  - Each card HAS a spirit value (usually 1)
-
-Bottom-left of card shows: [fire_value] [spirit_value]
-  - "_" means 0 (no fire/spirits provided)
-  - A number shows how much fire/spirits the card provides
-  - Values of 1 are shown as a space (most common default)
-"""),
-
-    ("Playing Cards", """\
-PLAYING CARDS - How to Place
-============================
-
-During your turn in a fight:
-
-1. SELECT a card from your hand (bottom row) using arrow keys
-2. Press UP or ENTER to start placing it
-
-If the card costs FIRE (🔥):
-  - First, MARK cards to sacrifice (press DOWN/ENTER on field cards)
-  - Marked cards will be highlighted in blue
-  - Keep marking until you have enough fire
-  - Then pick where to place (empty slot or marked slot)
-
-If the card costs SPIRITS (👻):
-  - Just pick an empty slot - spirits are deducted automatically
-
-If the card costs NOTHING:
-  - Called "Hamster cards" - just pick an empty slot!
-
-Press C when done placing cards to continue the fight.
-"""),
-
-    ("Skills", """\
-SKILLS - Special Abilities
-==========================
-
-Cards can have special skills shown as emoji symbols:
-
-  💀 Instant Death  - Instantly kills any card it damages
-  🐭 Fertility      - Creates a copy in your hand when played
-  🪁 Soaring        - Ignores opposing cards, hits opponent directly
-  🦔 Spines         - Attacker takes 1 damage after attacking
-  🚀 Air Defense    - Blocks Soaring attacks
-  🔰 Shield         - Absorbs 1 damage per turn
-  🐩 Underdog       - +1 power when facing stronger opponent
-  🧺 Packrat        - Draw a card when played
-  🍀 Lucky Strike   - 50/50 chance: instant kill or self-destruct
-  🩹 Regenerate     - Heals 1 damage at end of each round
-  🤕 Weakness       - Deals 1 less damage (negative skill)
-
-Skills can combine in interesting ways - experiment!
-"""),
-
-    ("Fight Mechanics", """\
-FIGHT MECHANICS
-===============
-
-The battlefield has 4 rows:
-  Row 0: Computer's preparation row (cards wait here)
-  Row 1: Computer's active row (cards attack from here)
-  ----  Gap between players
-  Row 2: Your active row (your cards attack from here)
-  Row 3: Your hand (cards you can play)
-
-Each round:
-  1. Computer places/moves cards
-  2. You place cards and press C to continue
-  3. All cards in active rows attack simultaneously
-  4. Damage is dealt, cards may die
-  5. Dead cards go to discard, generate spirits
-
-Win by dealing enough damage to the opponent!
-Lose if you take too much damage or run out of cards.
-"""),
-
-    ("Decks & Drawing", """\
-DECKS & DRAWING
-===============
-
-During a fight, you have multiple decks:
-
-  Draw Deck     - Your main deck, draw from here
-  Hamster Deck  - Special free cards (0 cost)
-  Hand          - Cards you can currently play
-  Discard       - Used/dead cards go here
-
-At the start of your turn, choose which deck to draw from
-using LEFT/RIGHT arrows, then UP/ENTER to draw.
-
-The draw deck contains your actual cards.
-The hamster deck contains free "hamster" cards that cost nothing
-to play but are weaker.
-
-Manage your resources carefully!
-"""),
-
-    ("Map & Locations", """\
-MAP & LOCATIONS
-===============
-
-Between fights, you navigate a map with various locations:
-
-  ⚔️  Fight     - Battle against computer opponent
-  🎰 Lottery   - Chance to win new cards or skills
-  ⬆️  Upgrader  - Improve your existing cards
-  🔄 Transfer  - Move skills between cards
-
-Use arrow keys to choose your path and ENTER to move.
-
-Your progress is shown by the current "rung" - how far
-you've traveled from the start.
-
-The game auto-saves after each location!
-"""),
-
-    ("Tips & Strategy", """\
-TIPS & STRATEGY
-===============
-
-• Balance your deck - mix high-cost powerful cards with
-  cheap cards you can sacrifice for fire
-
-• Cards with 0 fire cost are valuable - save them!
-
-• Build up spirits by letting cards die strategically
-
-• Air Defense counters Soaring - watch for flying enemies
-
-• Shield is powerful against multiple weak attacks
-
-• Regenerate helps cards survive longer battles
-
-• Fertility cards multiply - great value over time
-
-• Watch the deadlock counter - stalemates end badly!
-
-Good luck, and may your cards serve you well! 🎴
-"""),
-]
+def _load_help_sections() -> List[Tuple[str, str]]:
+    """Load help sections from YAML file, with dynamic skill generation."""
+    yaml_path = Path(__file__).parent / "help_content.yaml"
+    with open(yaml_path, 'r', encoding='utf-8') as f:
+        data = yaml.safe_load(f)
+    
+    sections = []
+    for section in data['sections']:
+        title = section['title']
+        content = section['content']
+        # Generate skills content dynamically
+        if title == "Skills" and content is None:
+            content = _generate_skills_content()
+        sections.append((title, content))
+    
+    return sections
 
 
 class HelpView:
@@ -206,8 +52,9 @@ class HelpView:
 
     def __init__(self, screen: Screen) -> None:
         self.screen = screen
+        self.sections = _load_help_sections()
         self.current_page = 0
-        self.total_pages = len(HELP_SECTIONS)
+        self.total_pages = len(self.sections)
 
     def show(self) -> None:
         """Display the help view with pagination. Returns when user exits."""
@@ -231,25 +78,28 @@ class HelpView:
                 else:
                     break
 
+    def _get_line_color(self, line: str, line_index: int) -> Color:
+        """Determine line color based on content."""
+        stripped = line.strip()
+        # Headers (first two lines or separator lines)
+        if line_index < 2 or stripped.startswith('==='):
+            return Color.YELLOW
+        # Lines starting with emoji or bullet points
+        if stripped and stripped[0] in '💪💓🔥👻💀🐭🪁🦔🚀🔰🐩🧺🍀🩹🤕⚔🎰⬆🔄•':
+            return Color.CYAN
+        return Color.WHITE
+
     def _draw_page(self) -> None:
         self.screen.clear_buffer(0, 0, 0)
 
-        title, content = HELP_SECTIONS[self.current_page]
+        title, content = self.sections[self.current_page]
 
         # Draw content
         margin_x, margin_y = 4, 2
         for i, line in enumerate(content.split('\n')):
             if margin_y + i >= self.screen.height - 4:
                 break
-            # Highlight the title/header lines
-            if i < 2 or line.startswith('==='):
-                color = Color.YELLOW
-            elif line.strip().startswith(('💪', '💓', '🔥', '👻', '💀', '🐭', '🪁', '🦔',
-                                          '🚀', '🔰', '🐩', '🧺', '🍀', '🩹', '🤕', '⚔',
-                                          '🎰', '⬆', '🔄', '•')):
-                color = Color.CYAN
-            else:
-                color = Color.WHITE
+            color = self._get_line_color(line, i)
             show_text(self.screen, dPos(margin_x, margin_y + i), line, color=color)
 
         # Draw navigation footer
@@ -261,12 +111,7 @@ class HelpView:
         show_text(self.screen, dPos(margin_x, footer_y), nav_info, color=Color.GRAY)
 
         # Draw page indicator dots
-        dots = ""
-        for i in range(self.total_pages):
-            if i == self.current_page:
-                dots += "● "
-            else:
-                dots += "○ "
+        dots = " ".join("●" if i == self.current_page else "○" for i in range(self.total_pages))
         show_text(self.screen, dPos(self.screen.width - len(dots) - 4, footer_y - 1),
                   dots, color=Color.MAGENTA)
 
