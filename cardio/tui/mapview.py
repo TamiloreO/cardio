@@ -7,6 +7,7 @@ from ..locations.location import Location
 from .constants import Color
 from .agent_primitives import HumanStateWidget
 from .tuibase import TUIBaseMixin
+from .helpview import HelpView
 
 
 class TUIMapView(TUIBaseMixin):
@@ -96,6 +97,8 @@ class TUIMapView(TUIBaseMixin):
                 cursor = max(0, cursor - 1)
             elif keycode == Screen.KEY_RIGHT:
                 cursor = min(len(possible_locations) - 1, cursor + 1)
+            elif keycode in (ord("h"), ord("H")):
+                HelpView(self.screen).show()
         return possible_locations[cursor]
 
     def move_to(self, loc: Location) -> None:

@@ -35,6 +35,7 @@ from ...placement_manager import (
     PlacementNotPossibleException,
 )
 from ..tuibase import TUIBaseMixin
+from ..helpview import HelpView
 
 
 class TUIFightVnC(TUIBaseMixin, FightVnC):
@@ -201,8 +202,9 @@ class TUIFightVnC(TUIBaseMixin, FightVnC):
         cursor = 0  # Cursor within hand deck
         while True:
             keycode = get_keycode(self.screen)
-            if keycode in (ord("i"), ord("I")):
-                pass  # FIXME Inventory!
+            if keycode in (ord("h"), ord("H")):
+                HelpView(self.screen).show()
+                self.redraw_view()
             elif keycode in (ord("c"), ord("C")):
                 break
 
