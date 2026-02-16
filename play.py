@@ -1,8 +1,10 @@
 import logging
 import argparse
+import sys
 from cardio import HumanPlayer
 from cardio.run import Run
 from cardio.tui.mapview import TUIMapView
+from cardio.tui.mainmenu import MainMenu, MenuChoice
 from cardio.locations.location_directory import view_directory
 # FIXME For some reason, we need to import blueprints here, otherwise jason will
 # complain about being partially initialized when starting the game:
@@ -23,50 +25,77 @@ if args.reset:
     jason.reset_all()
 
 
+# ----- main menu -----
+
+def check_save_exists() -> bool:
+    try:
+        jason.load_all()
+        return True
+    except FileNotFoundError:
+        return False
+
+
+def show_main_menu() -> MenuChoice:
+    has_save = check_save_exists()
+    menu = MainMenu(has_save=has_save)
+    return menu.show_menu()
+
+
 # ----- main -----
 
-run = None
+while True:
+    choice = show_main_menu()
 
-try:  # Existing game/player?
-    humanplayer, run = jason.load_all()
-except FileNotFoundError:  # New game/player
-    logging.debug("No save file found. Starting new game")
-    humanplayer = HumanPlayer.create_new("You")
+    if choice == MenuChoice.EXIT:
+        sys.exit(0)
 
-if args.human_name:
-    humanplayer.name = args.human_name
+    if choice == MenuChoice.NEW_GAME:
+        jason.reset_all()
+        humanplayer = HumanPlayer.create_new("You")
+        run = None
+    elif choice == MenuChoice.CONTINUE:
+        try:
+            humanplayer, run = jason.load_all()
+        except FileNotFoundError:
+            logging.debug("No save file found. Starting new game")
+            humanplayer = HumanPlayer.create_new("You")
+            run = None
 
-while True:  # Forever start new runs:
-    if not run or not run.is_on:
-        run = Run()
+    if args.human_name:
+        humanplayer.name = args.human_name
 
-    mapview = TUIMapView(run, humanplayer, debug=False)
-    if run.current_rung == 0:  # Starting a new run:
-        # Pick random cards from collection for the deck:
-        while True:
-            humanplayer.collection.shuffle()
-            humanplayer.deck.cards = humanplayer.collection.draw_cards(6)
-            if any(c.power > 0 for c in humanplayer.deck.cards):
-                # Make sure not the entire deck is powerless.
-                break
-        mapview.message("Starting a new run... 🏃 Good luck! 🐞")
+    while True:  # Forever start new runs:
+        if not run or not run.is_on:
+            run = Run()
 
-    jason.save_all(humanplayer, run)
+        mapview = TUIMapView(run, humanplayer, debug=False)
+        if run.current_rung == 0:  # Starting a new run:
+            # Pick random cards from collection for the deck:
+            while True:
+                humanplayer.collection.shuffle()
+                humanplayer.deck.cards = humanplayer.collection.draw_cards(6)
+                if any(c.power > 0 for c in humanplayer.deck.cards):
+                    # Make sure not the entire deck is powerless.
+                    break
+            mapview.message("Starting a new run... 🏃 Good luck! 🐞")
 
-    while run.is_on:  # Visit locations in run:
-        chosen_loc = mapview.get_next_location()
-        mapview.move_to(chosen_loc)
-        run.move_to(chosen_loc)
-        view = view_directory[type(chosen_loc)]  # type: ignore
-        run.is_on = chosen_loc.handle(view, humanplayer)
         jason.save_all(humanplayer, run)
 
-    # Run is over:
-    mapview.message("Game over! 🥴 For this run. Try another run. 🎮")
-    # FIXME Show run stats & somehow add run stats to player's history
-    humanplayer.reset_lives()
-    mapview.close()
-    # Add deck back into collection:
-    for card in humanplayer.deck.cards:
-        humanplayer.collection.add_card(card)
-    humanplayer.deck.cards = []
+        while run.is_on:  # Visit locations in run:
+            chosen_loc = mapview.get_next_location()
+            mapview.move_to(chosen_loc)
+            run.move_to(chosen_loc)
+            view = view_directory[type(chosen_loc)]  # type: ignore
+            run.is_on = chosen_loc.handle(view, humanplayer)
+            jason.save_all(humanplayer, run)
+
+        # Run is over:
+        mapview.message("Game over! 🥴 For this run. Try another run. 🎮")
+        # FIXME Show run stats & somehow add run stats to player's history
+        humanplayer.reset_lives()
+        mapview.close()
+        # Add deck back into collection:
+        for card in humanplayer.deck.cards:
+            humanplayer.collection.add_card(card)
+        humanplayer.deck.cards = []
+        break  # Return to main menu after a run ends

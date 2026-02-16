@@ -2,7 +2,11 @@ from dataclasses import dataclass
 import time
 from typing import Literal, Optional, Tuple, Union
 
-from asciimatics.constants import DOUBLE_LINE, SINGLE_LINE
+try:
+    from asciimatics.constants import DOUBLE_LINE, SINGLE_LINE
+except ImportError:
+    SINGLE_LINE = 1  # Fallback for older asciimatics versions
+    DOUBLE_LINE = 2
 from asciimatics.effects import Print
 from asciimatics.paths import Path
 from asciimatics.renderers import Fire
