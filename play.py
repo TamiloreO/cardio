@@ -1,8 +1,10 @@
 import logging
 import argparse
+import sys
 from cardio import HumanPlayer
 from cardio.run import Run
 from cardio.tui.mapview import TUIMapView
+from cardio.tui.mainmenu import MainMenu
 from cardio.locations.location_directory import view_directory
 # FIXME For some reason, we need to import blueprints here, otherwise jason will
 # complain about being partially initialized when starting the game:
@@ -23,14 +25,33 @@ if args.reset:
     jason.reset_all()
 
 
-# ----- main -----
+# ----- main menu -----
+
+def has_save_file() -> bool:
+    try:
+        jason.load_all()
+        return True
+    except FileNotFoundError:
+        return False
+
+
+menu = MainMenu(has_save=has_save_file())
+choice = menu.show()
+
+if choice == "exit":
+    sys.exit(0)
 
 run = None
+humanplayer = None
 
-try:  # Existing game/player?
-    humanplayer, run = jason.load_all()
-except FileNotFoundError:  # New game/player
-    logging.debug("No save file found. Starting new game")
+if choice == "continue":
+    try:
+        humanplayer, run = jason.load_all()
+    except FileNotFoundError:
+        logging.debug("No save file found. Starting new game")
+        humanplayer = HumanPlayer.create_new("You")
+else:  # choice == "start"
+    jason.reset_all()
     humanplayer = HumanPlayer.create_new("You")
 
 if args.human_name:
