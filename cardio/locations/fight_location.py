@@ -33,6 +33,7 @@ class FightLocation(Location):
         self.computerstrategy = SimpleRungBasedStrategy(grid=self.grid, rung=self.rung)
 
     def handle(self, view_class: Type[FightView], humanplayer: HumanPlayer) -> bool:
+        lives_before = humanplayer.lives
         vnc = view_class(
             computerstrategy=self.computerstrategy,
             grid=self.grid,
@@ -42,4 +43,12 @@ class FightLocation(Location):
         )
         vnc.handle_fight()
         vnc.close()
+
+        won = humanplayer.lives == lives_before
+        if humanplayer.current_run_stats:
+            if won:
+                humanplayer.current_run_stats.record_fight_won()
+            else:
+                humanplayer.current_run_stats.record_fight_lost()
+
         return humanplayer.lives > 0

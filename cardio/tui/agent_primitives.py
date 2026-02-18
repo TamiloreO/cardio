@@ -1,8 +1,10 @@
+from typing import Optional
 from asciimatics.screen import Screen
 from asciimatics.renderers import FigletText
 from cardio import GridPos
 from cardio.agent_damage_state import AgentDamageState
 from cardio.human_player import HumanPlayer
+from cardio.run_stats import RunStats
 from .utils import dPos, render_value, show, show_text
 from .constants import *
 
@@ -29,6 +31,38 @@ class HumanStateWidget:
 {render_value(self.humanplayer.spirits, '👻')}
 """
         show_text(self.screen, self.pos, s, color=Color.GRAY)
+
+
+class RunStatsWidget:
+    """Displays current run statistics on the map view."""
+
+    def __init__(
+        self, screen: Screen, humanplayer: HumanPlayer, pos: dPos
+    ) -> None:
+        self.screen = screen
+        self.humanplayer = humanplayer
+        self.pos = pos
+
+    def show(self) -> None:
+        stats = self.humanplayer.current_run_stats
+        if stats is None:
+            return
+
+        lines = [
+            "── Run Stats ──",
+            f"⚔️  Fights Won:  {stats.fights_won}",
+            f"💀 Fights Lost: {stats.fights_lost}",
+        ]
+
+        if stats.cards_collected > 0:
+            lines.append(f"🃏 Cards:       {stats.cards_collected}")
+
+        best_rung = self.humanplayer.run_history.best_rung()
+        if best_rung > 0:
+            lines.append(f"🏆 Best Rung:   {best_rung}")
+
+        for i, line in enumerate(lines):
+            show_text(self.screen, self.pos + (0, i), line, color=Color.GRAY)
 
 
 class StateWidget:
