@@ -1,5 +1,7 @@
 import pytest
 from collections import namedtuple
+# Import blueprints before cardio to avoid circular import issues with jason
+import cardio.blueprints  # noqa: F401
 from cardio import HumanPlayer, Grid, FightVnC, Card, FightCard
 
 TestSetup = namedtuple("TestSetup", ["human", "grid", "vnc", "ff"])

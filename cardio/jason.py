@@ -1,5 +1,11 @@
 """jason -- takes care of saving and loading data, serializing and deserializing
-objects, resetting save files, etc."""
+objects, resetting save files, etc.
+
+Note on import order: This module imports from cardio.blueprints, which in turn
+imports from cardio (for Card, CardList). The cardio module includes HumanPlayer,
+which has a hamster_blueprint field. To avoid circular import issues, ensure
+cardio.blueprints is imported before this module in application entry points.
+"""
 
 from datetime import datetime
 import json
@@ -10,6 +16,7 @@ import toml
 import cardio
 from cardio import Card, Deck, HumanPlayer
 from cardio.run import Run
+from cardio.run_stats import RunStats, RunHistory
 from cardio.blueprints import Blueprint
 
 
@@ -35,6 +42,18 @@ def decoder(d):
     # Blueprint:
     try:
         return Blueprint(original=d["_original"], description=d["description"])
+    except (TypeError, KeyError):
+        pass
+    # RunStats:
+    try:
+        if "rungs_completed" in d and "seed" in d and "timestamp" in d:
+            return RunStats(**d)
+    except (TypeError, KeyError):
+        pass
+    # RunHistory:
+    try:
+        if "runs" in d and isinstance(d["runs"], list):
+            return RunHistory(runs=d["runs"])
     except (TypeError, KeyError):
         pass
     # Other classes:

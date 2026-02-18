@@ -4,9 +4,11 @@ from cardio import HumanPlayer
 from cardio.run import Run
 from cardio.tui.mapview import TUIMapView
 from cardio.locations.location_directory import view_directory
-# FIXME For some reason, we need to import blueprints here, otherwise jason will
-# complain about being partially initialized when starting the game:
-import cardio.blueprints
+# Import blueprints before jason to ensure proper initialization order.
+# The jason module imports from cardio.blueprints, which imports from cardio
+# (for Card/CardList). Since HumanPlayer has a hamster_blueprint field that
+# references Blueprint, we need blueprints fully initialized first.
+import cardio.blueprints  # noqa: F401
 from cardio import jason
 
 logging.basicConfig(level=logging.DEBUG)
@@ -61,11 +63,24 @@ while True:  # Forever start new runs:
         run.is_on = chosen_loc.handle(view, humanplayer)
         jason.save_all(humanplayer, run)
 
-    # Run is over:
-    mapview.message("Game over! 🥴 For this run. Try another run. 🎮")
-    # FIXME Show run stats & somehow add run stats to player's history
+    # Run is over - record stats and show summary:
+    run_stats = humanplayer.add_run_to_history(
+        rungs_completed=run.current_rung,
+        seed=run.base_seed
+    )
+
+    game_over_msg = (
+        f"Game over! 🥴\n\n"
+        f"This run: Reached rung {run_stats.rungs_completed}\n\n"
+        f"Your history:\n{humanplayer.run_history.format_summary()}\n\n"
+        f"Try another run! 🎮"
+    )
+    mapview.message(game_over_msg)
+
     humanplayer.reset_lives()
+    jason.save_all(humanplayer, run)
     mapview.close()
+
     # Add deck back into collection:
     for card in humanplayer.deck.cards:
         humanplayer.collection.add_card(card)

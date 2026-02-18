@@ -2,6 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 from .deck import Deck
+from .run_stats import RunHistory, RunStats
 
 # from cardio.blueprints import thecatalog # Imported below to avoid circular imports
 
@@ -18,6 +19,7 @@ class HumanPlayer:
     deck: Deck = field(default_factory=lambda: Deck("main"))
     collection: Deck = field(default_factory=lambda: Deck("collection"))
     hamster_blueprint: Blueprint = None  # type: ignore
+    run_history: RunHistory = field(default_factory=RunHistory)
 
     def __post_init__(self):
         self.reset_lives()
@@ -29,6 +31,20 @@ class HumanPlayer:
 
     def reset_lives(self) -> None:
         self.lives = 2
+
+    def add_run_to_history(self, rungs_completed: int, seed: str) -> RunStats:
+        """Record a completed run in the player's history.
+
+        Args:
+            rungs_completed: How many rungs the player reached before the run ended.
+            seed: The seed used for the run (for reproducibility).
+
+        Returns:
+            The RunStats object that was created and added to history.
+        """
+        stats = RunStats(rungs_completed=rungs_completed, seed=seed)
+        self.run_history.add_run(stats)
+        return stats
 
     @classmethod
     def create_new(cls, name: str) -> HumanPlayer:
