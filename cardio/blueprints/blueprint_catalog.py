@@ -1,14 +1,27 @@
 from __future__ import annotations
 from pathlib import Path
 from collections import defaultdict
-from typing import List, Optional, Union
-from cardio import jason, skills
+from typing import List, Optional, Union, TYPE_CHECKING
 from cardio.card import Card
 from cardio.whichplayer import WhichPlayer
 from .blueprint import Blueprint, BlueprintList
 
+if TYPE_CHECKING:
+    from cardio import jason as jason_module
 
 MAX_NAME_LENGTH = 14
+
+
+def _get_jason():
+    """Lazy import of jason module to avoid circular imports at module load time."""
+    from cardio import jason
+    return jason
+
+
+def _get_skills():
+    """Lazy import of skills module to avoid circular imports at module load time."""
+    from cardio import skills
+    return skills
 
 
 class BlueprintNameExistsError(Exception):
@@ -102,6 +115,7 @@ class BlueprintCatalog:
 
     def add_blueprint(self, blueprint: Blueprint) -> None:
         def skillname_included(name: str) -> bool:
+            skills = _get_skills()
             skillnames = [
                 c.__name__ for c in skills.get_skilltypes()
             ]
@@ -128,12 +142,22 @@ class BlueprintCatalog:
         self._blueprints.append(blueprint)
 
     def save(self, filename: Optional[str] = None) -> None:
-        jason.save_file(list(self._blueprints), _get_path(filename))
+        _get_jason().save_file(list(self._blueprints), _get_path(filename))
 
     @classmethod
     def load(cls, filename: Optional[str] = None) -> BlueprintCatalog:
-        return cls(BlueprintList(jason.load_file(_get_path(filename))))
+        return cls(BlueprintList(_get_jason().load_file(_get_path(filename))))
 
 
-# Create the one catalog that is used throughout the game:
-thecatalog = BlueprintCatalog.load()
+class _LazyCatalog:
+    """Lazy-loading wrapper for the catalog to avoid circular imports at module load."""
+
+    _instance: Optional[BlueprintCatalog] = None
+
+    def __getattr__(self, name: str):
+        if self._instance is None:
+            self._instance = BlueprintCatalog.load()
+        return getattr(self._instance, name)
+
+
+thecatalog = _LazyCatalog()

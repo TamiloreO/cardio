@@ -10,7 +10,7 @@ import toml
 import cardio
 from cardio import Card, Deck, HumanPlayer
 from cardio.run import Run
-from cardio.blueprints import Blueprint
+from cardio.run_stats import RunStats, RunHistory
 
 
 BASE_PATH = user_data_path("cardio")
@@ -19,9 +19,19 @@ RUN_PATH = BASE_PATH / "run.json"
 META_PATH = BASE_PATH / "meta.json"
 
 
+def _get_blueprint_class():
+    """Lazy import of Blueprint to avoid circular imports."""
+    from cardio.blueprints import Blueprint
+    return Blueprint
+
+
 def encoder(x):
     if isinstance(x, cardio.skills.SkillSet):
         return [t.__name__ for t in x.get_types()]
+    if isinstance(x, RunHistory):
+        return {"_type": "RunHistory", "runs": x.to_list()}
+    if isinstance(x, RunStats):
+        return {"_type": "RunStats", **x.to_dict()}
     d = x.__dict__
     if "_fc" in d:
         del d["_fc"]
@@ -32,11 +42,23 @@ def decoder(d):
     # Skills:
     if "skills" in d:
         d["skills"] = [getattr(cardio.skills, t) for t in d["skills"]]
-    # Blueprint:
+
+    # RunHistory:
+    if d.get("_type") == "RunHistory":
+        return RunHistory.from_list(d.get("runs"))
+
+    # RunStats:
+    if d.get("_type") == "RunStats":
+        data = {k: v for k, v in d.items() if k != "_type"}
+        return RunStats.from_dict(data)
+
+    # Blueprint (lazy import to avoid circular imports):
     try:
+        Blueprint = _get_blueprint_class()
         return Blueprint(original=d["_original"], description=d["description"])
     except (TypeError, KeyError):
         pass
+
     # Other classes:
     for class_ in [HumanPlayer, Deck, Card, Run]:
         try:

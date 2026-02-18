@@ -4,9 +4,6 @@ from cardio import HumanPlayer
 from cardio.run import Run
 from cardio.tui.mapview import TUIMapView
 from cardio.locations.location_directory import view_directory
-# FIXME For some reason, we need to import blueprints here, otherwise jason will
-# complain about being partially initialized when starting the game:
-import cardio.blueprints
 from cardio import jason
 
 logging.basicConfig(level=logging.DEBUG)
@@ -42,6 +39,7 @@ while True:  # Forever start new runs:
 
     mapview = TUIMapView(run, humanplayer, debug=False)
     if run.current_rung == 0:  # Starting a new run:
+        humanplayer.start_run(run.base_seed)
         # Pick random cards from collection for the deck:
         while True:
             humanplayer.collection.shuffle()
@@ -61,10 +59,19 @@ while True:  # Forever start new runs:
         run.is_on = chosen_loc.handle(view, humanplayer)
         jason.save_all(humanplayer, run)
 
-    # Run is over:
-    mapview.message("Game over! 🥴 For this run. Try another run. 🎮")
-    # FIXME Show run stats & somehow add run stats to player's history
+    # Run is over - record stats and show summary:
+    completed_stats = humanplayer.end_run(run.current_rung)
+    if completed_stats:
+        run_summary = completed_stats.get_summary()
+        history_summary = humanplayer.run_history.get_summary()
+        mapview.message(
+            f"Game over! 🥴\n\n{run_summary}\n\n{history_summary}\n\nTry another run! 🎮"
+        )
+    else:
+        mapview.message("Game over! 🥴 For this run. Try another run. 🎮")
+
     humanplayer.reset_lives()
+    jason.save_all(humanplayer, run)
     mapview.close()
     # Add deck back into collection:
     for card in humanplayer.deck.cards:
