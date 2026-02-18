@@ -21,6 +21,11 @@ class FightView(BaseLocationView, Protocol):
     def handle_fight(self) -> None:
         ...
 
+    @property
+    def winner(self) -> str:
+        """Return the winner of the fight: 'human' or 'computer'."""
+        ...
+
 
 class FightLocation(Location):
     marker = "FFF"
@@ -41,5 +46,13 @@ class FightLocation(Location):
             description="FIGHT!",
         )
         vnc.handle_fight()
+
+        # Record fight result in run stats
+        if humanplayer.current_run_stats is not None:
+            if vnc.winner == "human":
+                humanplayer.current_run_stats.record_fight_won()
+            else:
+                humanplayer.current_run_stats.record_fight_lost()
+
         vnc.close()
         return humanplayer.lives > 0

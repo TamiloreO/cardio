@@ -35,6 +35,12 @@ class FightVnC:
         FightCard.init_fight(self, self.grid)
         self.computerstrategy = computerstrategy
         self.humanplayer = humanplayer
+        self._winner: Optional[WhichPlayer] = None
+
+    @property
+    def winner(self) -> Optional[WhichPlayer]:
+        """Return the winner of the fight after it has ended."""
+        return self._winner
 
     # --- Called by FightCard class ---
 
@@ -227,18 +233,18 @@ class FightVnC:
 
         # Run the fight:
         self.round_num = 0
-        winner = None
+        self._winner = None
         while True:
             try:
                 self._handle_round_of_fight()
             except EndOfFightException as exc:
-                winner = exc.winner
+                self._winner = exc.winner
                 break
             self.round_num += 1
         self.stateslogger.log_current_state(final=True)
 
         # Handle win/lose conditions:
-        if winner == "computer":
+        if self._winner == "computer":
             self.humanplayer.lives -= 1
             if self.humanplayer.lives > 0:
                 livesmsg = (
@@ -249,7 +255,7 @@ class FightVnC:
                 livesmsg = "No lives left. 😞"
             self.fight_ends(f"You lose! 🥹  You lost 1 live. 💔 {livesmsg}")
 
-        if winner == "human":
+        if self._winner == "human":
             gems = self.damagestate.get_overflow()
             self.humanplayer.gems += gems
             gemstr = f"You gain {'💎' * gems}." if gems > 0 else ""
