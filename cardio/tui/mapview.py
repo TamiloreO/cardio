@@ -9,10 +9,28 @@ from .agent_primitives import HumanStateWidget
 from .tuibase import TUIBaseMixin
 
 
+LOCATION_GUIDE = [
+    ("LOCATIONS", None),
+    ("FFF", "Fight - Battle enemy cards"),
+    ("···", "Empty - Nothing happens"),
+    ("UPU", "Power Up - +1 power to a card"),
+    ("UHU", "Health Up - +1 health to a card"),
+    ("UP*", "Power Up Multi - Risk losing card"),
+    ("UH*", "Health Up Multi - Risk losing card"),
+    ("S→→", "Skill Transfer - Move skill between cards"),
+    ("SL⚀", "Skill Lottery - Random skill (may lose one)"),
+    ("", None),
+    ("CONTROLS", None),
+    ("←/→", "Select location"),
+    ("↑/Enter", "Confirm selection"),
+]
+
+
 class TUIMapView(TUIBaseMixin):
     MAPTOPLEFT = dPos(20, 10)
     AGENTINFO = dPos(70, 2)
     GAMEINFO = dPos(70, 18)
+    GUIDEINFO = dPos(100, 2)
 
     def __init__(self, run: Run, humanplayer: HumanPlayer, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -34,6 +52,14 @@ class TUIMapView(TUIBaseMixin):
             view_index * 9,
             (height - (loc.rung - self.run.current_rung)) * 6,
         )
+
+    def _draw_guide(self) -> None:
+        for i, (marker, desc) in enumerate(LOCATION_GUIDE):
+            if desc is None:
+                show_text(self.screen, self.GUIDEINFO + (0, i), f"── {marker} ──", Color.YELLOW)
+            else:
+                show_text(self.screen, self.GUIDEINFO + (0, i), f"{marker}", Color.WHITE)
+                show_text(self.screen, self.GUIDEINFO + (5, i), f"{desc}", Color.GRAY)
 
     def redraw(self, cursor_pos: Optional[int] = None) -> None:
         self.screen.clear_buffer(0, 0, 0)
@@ -79,6 +105,9 @@ class TUIMapView(TUIBaseMixin):
             f"Seed: {self.run.base_seed}",
             color=Color.GRAY,
         )
+
+        # Draw guide:
+        self._draw_guide()
 
         if self.debug:
             show_screen_resolution(self.screen)
