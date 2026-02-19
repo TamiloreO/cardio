@@ -6,6 +6,7 @@ from ..run import Run
 from ..locations.location import Location
 from .constants import Color
 from .agent_primitives import HumanStateWidget
+from .hints import HintsWidget
 from .tuibase import TUIBaseMixin
 
 
@@ -13,11 +14,13 @@ class TUIMapView(TUIBaseMixin):
     MAPTOPLEFT = dPos(20, 10)
     AGENTINFO = dPos(70, 2)
     GAMEINFO = dPos(70, 18)
+    HINTS = dPos(110, 2)
 
     def __init__(self, run: Run, humanplayer: HumanPlayer, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.run = run
         self.humanstate = HumanStateWidget(self.screen, humanplayer, self.AGENTINFO)
+        self.hints = HintsWidget(self.screen, self.HINTS)
 
     def dpos_from_location(self, loc: Location) -> dPos:
         # FIXME This is not nice bc it hardcodes all kinds of things that are flexible
@@ -79,6 +82,9 @@ class TUIMapView(TUIBaseMixin):
             f"Seed: {self.run.base_seed}",
             color=Color.GRAY,
         )
+
+        # Show hints/guide panel:
+        self.hints.show()
 
         if self.debug:
             show_screen_resolution(self.screen)
