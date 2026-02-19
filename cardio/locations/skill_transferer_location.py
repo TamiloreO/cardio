@@ -1,4 +1,4 @@
-from typing import Protocol, Type
+from typing import Optional, Protocol, Type
 import random
 from cardio import Card, CardList
 from cardio.human_player import HumanPlayer
@@ -13,7 +13,7 @@ class SkillTransfererView(BaseLocationView, Protocol):
     def pick_from(self, from_cards: CardList) -> Card:
         ...
 
-    def pick_to(self, to_cards: CardList) -> Card:
+    def pick_to(self, to_cards: CardList) -> Optional[Card]:
         ...
 
     def show_destroy(self, card: Card) -> None:
@@ -46,9 +46,6 @@ class SkillTransfererLocation(Location):
     - There are currently no restrictions as to which skills can and cannot be combined
       with which other skills. (Should there be?)
     """
-
-    # FIXME Add the possibility to pick a different card once a from_card has been
-    # selected but before the to_card has been chosen (=escape key functionality)
 
     marker = "S→→"
     descrption = (
@@ -91,7 +88,10 @@ class SkillTransfererLocation(Location):
             to_cards = get_to_cards(from_card, humanplayer.deck.cards)
             if len(to_cards) > 0:
                 to_card = view.pick_to(to_cards)
-                break
+                if to_card is not None:
+                    break
+                # User pressed escape, let them pick a different from_card
+                continue
             view.message(
                 "There are no cards you can apply these skill(s) to.\n"
                 "Please pick a different card to get the skill(s) from."

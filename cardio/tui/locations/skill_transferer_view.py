@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from ... import Card, CardList
 from ..tuibase import TUIBaseMixin
 from ..card_picker import CardPicker
@@ -20,5 +20,7 @@ class TUISkillTransfererView(TUIBaseMixin):
         self.picked = self.cardpicker.pick(from_cards)
         return self.picked
 
-    def pick_to(self, to_cards: CardList) -> Card:
-        return self.cardpicker.pick(to_cards, marks=[self.cards.index(self.picked)])
+    def pick_to(self, to_cards: CardList) -> Optional[Card]:
+        return self.cardpicker.pick(
+            to_cards, marks=[self.cards.index(self.picked)], allow_escape=True
+        )

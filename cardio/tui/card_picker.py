@@ -57,8 +57,11 @@ class CardPicker:
         self.screen.refresh()
 
     def pick(
-        self, activecards: Optional[CardList] = None, marks: Optional[List[int]] = None
-    ) -> Card:
+        self,
+        activecards: Optional[CardList] = None,
+        marks: Optional[List[int]] = None,
+        allow_escape: bool = False,
+    ) -> Optional[Card]:
         def search(current_cursor: int, dir: Literal[1, -1], offset: int) -> int:
             if dir > 0:
                 limit, within = len(self.cards), operator.lt
@@ -78,6 +81,8 @@ class CardPicker:
             keycode = get_keycode(self.screen)
             if keycode == 13:  # Return
                 return self.cards[cursor]
+            if allow_escape and keycode == Screen.KEY_ESCAPE:
+                return None
             if keycode == Screen.KEY_LEFT:
                 cursor = search(cursor, -1, 1)
             if keycode == Screen.KEY_RIGHT:
