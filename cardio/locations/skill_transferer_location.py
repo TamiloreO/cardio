@@ -1,4 +1,4 @@
-from typing import Protocol, Type
+from typing import Optional, Protocol, Type
 import random
 from cardio import Card, CardList
 from cardio.human_player import HumanPlayer
@@ -13,7 +13,8 @@ class SkillTransfererView(BaseLocationView, Protocol):
     def pick_from(self, from_cards: CardList) -> Card:
         ...
 
-    def pick_to(self, to_cards: CardList) -> Card:
+    def pick_to(self, to_cards: CardList) -> Optional[Card]:
+        """Pick a card to transfer skills to. Returns None if user cancels (escape)."""
         ...
 
     def show_destroy(self, card: Card) -> None:
@@ -46,9 +47,6 @@ class SkillTransfererLocation(Location):
     - There are currently no restrictions as to which skills can and cannot be combined
       with which other skills. (Should there be?)
     """
-
-    # FIXME Add the possibility to pick a different card once a from_card has been
-    # selected but before the to_card has been chosen (=escape key functionality)
 
     marker = "S→→"
     descrption = (
@@ -85,17 +83,20 @@ class SkillTransfererLocation(Location):
             return True
 
         # Have the user pick a from_card and a to_card from the list of possible
-        # to_cards:
+        # to_cards. User can press escape during to_card selection to go back and
+        # pick a different from_card:
         while True:
             from_card = view.pick_from(from_cards)
             to_cards = get_to_cards(from_card, humanplayer.deck.cards)
-            if len(to_cards) > 0:
-                to_card = view.pick_to(to_cards)
+            if len(to_cards) == 0:
+                view.message(
+                    "There are no cards you can apply these skill(s) to.\n"
+                    "Please pick a different card to get the skill(s) from."
+                )
+                continue
+            to_card = view.pick_to(to_cards)
+            if to_card is not None:
                 break
-            view.message(
-                "There are no cards you can apply these skill(s) to.\n"
-                "Please pick a different card to get the skill(s) from."
-            )
 
         # Apply (random) skill to the second card and destroy the first card if it was
         # the last skill remaining:

@@ -1,3 +1,4 @@
+from typing import Optional
 from cardio import Card, CardList, Deck, skills
 from cardio.locations.skill_transferer_location import (
     SkillTransfererLocation,
@@ -14,7 +15,7 @@ class FakeSkillTransfererView(SkillTransfererView):
     def pick_from(self, from_cards: CardList) -> Card:
         return from_cards[0]
 
-    def pick_to(self, to_cards: CardList) -> Card:
+    def pick_to(self, to_cards: CardList) -> Optional[Card]:
         return to_cards[0]
 
     def show_destroy(self, card: Card) -> None:
@@ -95,3 +96,39 @@ def test_no_cards_to_transfer_to(tt_setup):
     res = loc.handle(view_class=FakeSkillTransfererView, humanplayer=human)
     assert res == True
     assert "no combination" in message
+
+
+def test_escape_during_to_card_selection_allows_reselecting_from_card(tt_setup):
+    """Test that pressing escape during to_card selection returns to from_card selection."""
+    human, *_ = tt_setup
+    from_card = Card("From", 1, 1, 1, [skills.Spines])
+    to_card = Card("To", 1, 1, 1, None)
+    cards = [from_card, to_card]
+    human.deck = Deck("main", cards)
+
+    # Track how many times pick_from and pick_to are called
+    pick_from_calls = []
+    pick_to_calls = []
+
+    class EscapeTestView(FakeSkillTransfererView):
+        def pick_from(self, from_cards: CardList) -> Card:
+            pick_from_calls.append(list(from_cards))
+            return from_cards[0]
+
+        def pick_to(self, to_cards: CardList) -> Optional[Card]:
+            pick_to_calls.append(list(to_cards))
+            # First call simulates escape (returns None), second call returns the card
+            return None if len(pick_to_calls) == 1 else to_cards[0]
+
+    loc = SkillTransfererLocation("0", 0, 0, [])
+    res = loc.handle(view_class=EscapeTestView, humanplayer=human)
+
+    assert res == True
+    # pick_from should have been called twice (once initially, once after escape)
+    assert len(pick_from_calls) == 2
+    # pick_to should have been called twice (first returned None, second returned card)
+    assert len(pick_to_calls) == 2
+    # From card only had one skill, so it should have been destroyed
+    assert human.deck.size() == 1
+    # The "To" card should now have the Spines skill
+    assert to_card.skills.get_types() == [skills.Spines]
