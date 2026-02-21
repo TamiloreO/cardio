@@ -1,8 +1,10 @@
 import logging
 import argparse
+from asciimatics.screen import Screen
 from cardio import HumanPlayer
 from cardio.run import Run
 from cardio.tui.mapview import TUIMapView
+from cardio.tui.splash import show_splash_screen
 from cardio.locations.location_directory import view_directory
 # FIXME For some reason, we need to import blueprints here, otherwise jason will
 # complain about being partially initialized when starting the game:
@@ -17,10 +19,21 @@ logging.basicConfig(level=logging.DEBUG)
 parser = argparse.ArgumentParser()
 parser.add_argument("--reset", action="store_true", help="Delete save files")
 parser.add_argument("--human-name", action="store", help="Set human player's name")
+parser.add_argument("--skip-splash", action="store_true", help="Skip the splash screen")
 args = parser.parse_args()
 
 if args.reset:
     jason.reset_all()
+
+
+# ----- splash screen -----
+
+if not args.skip_splash:
+    screen = Screen.open(unicode_aware=True)
+    try:
+        show_splash_screen(screen, wait_for_key=True)
+    finally:
+        screen.close()
 
 
 # ----- main -----

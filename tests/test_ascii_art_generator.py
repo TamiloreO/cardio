@@ -286,8 +286,8 @@ class TestCaching:
         img2 = Image.new("L", (10, 10), color=0)
         img2.save(image_path)
         
-        generator2 = AsciiArtGenerator(output_dir=output_dir, width=10)
-        result2 = generator2.generate(str(image_path))
+        generator._load_cache()
+        result2 = generator.generate(str(image_path))
         
         assert result1 != result2
 
