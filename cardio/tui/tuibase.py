@@ -4,11 +4,20 @@ import time
 from asciimatics.screen import Screen
 from asciimatics.renderers import FigletText
 from .utils import splash_message, wait_for_any_key
+from .splash import show_splash_screen
+
+# Track whether splash has been shown this session
+_splash_shown = False
 
 
 class TUIBaseMixin:
     def __init__(
-        self, description: Optional[str] = None, debug: bool = False, *args, **kwargs
+        self,
+        description: Optional[str] = None,
+        debug: bool = False,
+        show_splash: bool = True,
+        *args,
+        **kwargs
     ) -> None:
         super().__init__(*args, **kwargs)
         self.debug = debug
@@ -20,6 +29,12 @@ class TUIBaseMixin:
                 f"Yours is {self.screen.width}x{self.screen.height}."
             )
         atexit.register(self.close)
+
+        global _splash_shown
+        if show_splash and not _splash_shown:
+            show_splash_screen(self.screen)
+            _splash_shown = True
+
         if description:
             self.message(description)
 
