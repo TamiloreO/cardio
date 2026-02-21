@@ -1,16 +1,21 @@
 """Tests for the ASCII art generator module."""
 
+import json
 import pytest
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 from PIL import Image
 
-from cardio.assets.ascii_art_generator import (
+from cardio.assets import (
     AsciiArtGenerator,
     AsciiArtGeneratorError,
     ImageNotFoundError,
     InvalidImageError,
     image_to_ascii_art,
+    generate_assets,
+    ASSETS_DIR,
+    IMAGES_DIR,
+    GENERATED_DIR,
 )
 
 
@@ -229,8 +234,10 @@ class TestGenerateFromDirectory:
         with pytest.raises(FileNotFoundError):
             generator.generate_from_directory("/nonexistent/directory")
 
-    def test_generate_from_directory_skips_invalid_images(self, tmp_path):
-        """Test that invalid images are skipped without failing."""
+    def test_generate_from_directory_logs_invalid_images(self, tmp_path, caplog):
+        """Test that invalid images are logged as warnings."""
+        import logging
+        
         source_dir = tmp_path / "source"
         source_dir.mkdir()
         
@@ -240,10 +247,13 @@ class TestGenerateFromDirectory:
         
         output_dir = tmp_path / "output"
         generator = AsciiArtGenerator(output_dir=output_dir, width=10)
-        results = generator.generate_from_directory(str(source_dir))
+        
+        with caplog.at_level(logging.WARNING):
+            results = generator.generate_from_directory(str(source_dir))
         
         assert len(results) == 1
         assert "valid" in results
+        assert any("invalid.png" in record.message for record in caplog.records)
 
     def test_generate_from_directory_case_insensitive_extensions(self, tmp_path):
         """Test that extension matching is case-insensitive."""
@@ -305,6 +315,216 @@ class TestImageToAsciiArtFunction:
             )
 
 
+class TestGenerateAssets:
+    """Test suite for generate_assets function with caching."""
+
+    def test_generate_assets_creates_directories(self, tmp_path, monkeypatch):
+        """Test that generate_assets creates required directories."""
+        images_dir = tmp_path / "images"
+        generated_dir = tmp_path / "generated"
+        
+        monkeypatch.setattr(
+            "cardio.assets.ascii_art_generator.IMAGES_DIR", images_dir
+        )
+        monkeypatch.setattr(
+            "cardio.assets.ascii_art_generator.GENERATED_DIR", generated_dir
+        )
+        monkeypatch.setattr(
+            "cardio.assets.ascii_art_generator.CACHE_FILE",
+            generated_dir / ".cache.json"
+        )
+        
+        generate_assets()
+        
+        assert images_dir.exists()
+        assert generated_dir.exists()
+
+    def test_generate_assets_processes_images(self, tmp_path, monkeypatch):
+        """Test that generate_assets processes all images."""
+        images_dir = tmp_path / "images"
+        generated_dir = tmp_path / "generated"
+        images_dir.mkdir()
+        
+        for name in ["img1.png", "img2.jpg"]:
+            img = Image.new("L", (10, 10), color=128)
+            img.save(images_dir / name)
+        
+        monkeypatch.setattr(
+            "cardio.assets.ascii_art_generator.IMAGES_DIR", images_dir
+        )
+        monkeypatch.setattr(
+            "cardio.assets.ascii_art_generator.GENERATED_DIR", generated_dir
+        )
+        monkeypatch.setattr(
+            "cardio.assets.ascii_art_generator.CACHE_FILE",
+            generated_dir / ".cache.json"
+        )
+        
+        results = generate_assets(width=10)
+        
+        assert len(results) == 2
+        assert (generated_dir / "img1.txt").exists()
+        assert (generated_dir / "img2.txt").exists()
+
+    def test_generate_assets_uses_cache(self, tmp_path, monkeypatch):
+        """Test that generate_assets skips cached images."""
+        images_dir = tmp_path / "images"
+        generated_dir = tmp_path / "generated"
+        images_dir.mkdir()
+        generated_dir.mkdir()
+        
+        img = Image.new("L", (10, 10), color=128)
+        img.save(images_dir / "cached.png")
+        
+        monkeypatch.setattr(
+            "cardio.assets.ascii_art_generator.IMAGES_DIR", images_dir
+        )
+        monkeypatch.setattr(
+            "cardio.assets.ascii_art_generator.GENERATED_DIR", generated_dir
+        )
+        monkeypatch.setattr(
+            "cardio.assets.ascii_art_generator.CACHE_FILE",
+            generated_dir / ".cache.json"
+        )
+        
+        # First run - should generate
+        results1 = generate_assets(width=10)
+        assert len(results1) == 1
+        
+        # Modify the output file to detect if it gets regenerated
+        output_file = generated_dir / "cached.txt"
+        original_content = output_file.read_text()
+        output_file.write_text("MODIFIED")
+        
+        # Second run - should use cache and NOT regenerate
+        results2 = generate_assets(width=10)
+        assert len(results2) == 1
+        assert output_file.read_text() == "MODIFIED"
+
+    def test_generate_assets_force_regenerates(self, tmp_path, monkeypatch):
+        """Test that force=True ignores cache."""
+        images_dir = tmp_path / "images"
+        generated_dir = tmp_path / "generated"
+        images_dir.mkdir()
+        generated_dir.mkdir()
+        
+        img = Image.new("L", (10, 10), color=128)
+        img.save(images_dir / "test.png")
+        
+        monkeypatch.setattr(
+            "cardio.assets.ascii_art_generator.IMAGES_DIR", images_dir
+        )
+        monkeypatch.setattr(
+            "cardio.assets.ascii_art_generator.GENERATED_DIR", generated_dir
+        )
+        monkeypatch.setattr(
+            "cardio.assets.ascii_art_generator.CACHE_FILE",
+            generated_dir / ".cache.json"
+        )
+        
+        # First run
+        generate_assets(width=10)
+        
+        # Modify output
+        output_file = generated_dir / "test.txt"
+        output_file.write_text("MODIFIED")
+        
+        # Force regenerate
+        generate_assets(width=10, force=True)
+        assert output_file.read_text() != "MODIFIED"
+
+    def test_generate_assets_regenerates_on_width_change(self, tmp_path, monkeypatch):
+        """Test that changing width triggers regeneration."""
+        images_dir = tmp_path / "images"
+        generated_dir = tmp_path / "generated"
+        images_dir.mkdir()
+        generated_dir.mkdir()
+        
+        img = Image.new("L", (20, 20), color=128)
+        img.save(images_dir / "test.png")
+        
+        monkeypatch.setattr(
+            "cardio.assets.ascii_art_generator.IMAGES_DIR", images_dir
+        )
+        monkeypatch.setattr(
+            "cardio.assets.ascii_art_generator.GENERATED_DIR", generated_dir
+        )
+        monkeypatch.setattr(
+            "cardio.assets.ascii_art_generator.CACHE_FILE",
+            generated_dir / ".cache.json"
+        )
+        
+        # First run with width=10
+        results1 = generate_assets(width=10)
+        content1 = (generated_dir / "test.txt").read_text()
+        
+        # Second run with width=20 - should regenerate
+        results2 = generate_assets(width=20)
+        content2 = (generated_dir / "test.txt").read_text()
+        
+        assert content1 != content2
+
+    def test_generate_assets_regenerates_on_image_change(self, tmp_path, monkeypatch):
+        """Test that modifying image triggers regeneration."""
+        images_dir = tmp_path / "images"
+        generated_dir = tmp_path / "generated"
+        images_dir.mkdir()
+        generated_dir.mkdir()
+        
+        monkeypatch.setattr(
+            "cardio.assets.ascii_art_generator.IMAGES_DIR", images_dir
+        )
+        monkeypatch.setattr(
+            "cardio.assets.ascii_art_generator.GENERATED_DIR", generated_dir
+        )
+        monkeypatch.setattr(
+            "cardio.assets.ascii_art_generator.CACHE_FILE",
+            generated_dir / ".cache.json"
+        )
+        
+        # Create and process first image
+        img1 = Image.new("L", (10, 10), color=0)  # Black
+        img1.save(images_dir / "test.png")
+        results1 = generate_assets(width=10)
+        content1 = (generated_dir / "test.txt").read_text()
+        
+        # Replace with different image
+        img2 = Image.new("L", (10, 10), color=255)  # White
+        img2.save(images_dir / "test.png")
+        results2 = generate_assets(width=10)
+        content2 = (generated_dir / "test.txt").read_text()
+        
+        assert content1 != content2
+
+    def test_generate_assets_creates_cache_file(self, tmp_path, monkeypatch):
+        """Test that cache file is created."""
+        images_dir = tmp_path / "images"
+        generated_dir = tmp_path / "generated"
+        cache_file = generated_dir / ".cache.json"
+        images_dir.mkdir()
+        
+        img = Image.new("L", (10, 10), color=128)
+        img.save(images_dir / "test.png")
+        
+        monkeypatch.setattr(
+            "cardio.assets.ascii_art_generator.IMAGES_DIR", images_dir
+        )
+        monkeypatch.setattr(
+            "cardio.assets.ascii_art_generator.GENERATED_DIR", generated_dir
+        )
+        monkeypatch.setattr(
+            "cardio.assets.ascii_art_generator.CACHE_FILE", cache_file
+        )
+        
+        generate_assets(width=10)
+        
+        assert cache_file.exists()
+        cache = json.loads(cache_file.read_text())
+        assert "test.png" in cache
+        assert "hash" in cache["test.png"]
+        assert cache["test.png"]["width"] == 10
+
+
 class TestExceptionHierarchy:
     """Test suite for exception class hierarchy."""
 
@@ -319,3 +539,28 @@ class TestExceptionHierarchy:
     def test_generator_error_is_exception(self):
         """Test AsciiArtGeneratorError inherits from Exception."""
         assert issubclass(AsciiArtGeneratorError, Exception)
+
+
+class TestModuleExports:
+    """Test that all expected items are exported from the package."""
+
+    def test_exports_from_package(self):
+        """Test that key items are importable from cardio.assets."""
+        from cardio.assets import (
+            ASSETS_DIR,
+            IMAGES_DIR,
+            GENERATED_DIR,
+            AsciiArtGenerator,
+            AsciiArtGeneratorError,
+            ImageNotFoundError,
+            InvalidImageError,
+            image_to_ascii_art,
+            generate_assets,
+        )
+        
+        assert ASSETS_DIR is not None
+        assert IMAGES_DIR is not None
+        assert GENERATED_DIR is not None
+        assert AsciiArtGenerator is not None
+        assert image_to_ascii_art is not None
+        assert generate_assets is not None
