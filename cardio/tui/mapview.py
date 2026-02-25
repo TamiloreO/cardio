@@ -7,6 +7,7 @@ from ..locations.location import Location
 from .constants import Color
 from .agent_primitives import HumanStateWidget
 from .tuibase import TUIBaseMixin
+from .deck_explorer import DeckExplorer
 
 
 class TUIMapView(TUIBaseMixin):
@@ -17,6 +18,7 @@ class TUIMapView(TUIBaseMixin):
     def __init__(self, run: Run, humanplayer: HumanPlayer, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.run = run
+        self.humanplayer = humanplayer
         self.humanstate = HumanStateWidget(self.screen, humanplayer, self.AGENTINFO)
 
     def dpos_from_location(self, loc: Location) -> dPos:
@@ -84,6 +86,11 @@ class TUIMapView(TUIBaseMixin):
             show_screen_resolution(self.screen)
         self.screen.refresh()
 
+    def show_deck_explorer(self) -> None:
+        decks = [self.humanplayer.deck, self.humanplayer.collection]
+        explorer = DeckExplorer(self.screen, decks)
+        explorer.run()
+
     def get_next_location(self) -> Location:
         possible_locations = self.run.get_accessible_locations(1)
         cursor = min(self.run.current_index, len(possible_locations) - 1)
@@ -96,6 +103,8 @@ class TUIMapView(TUIBaseMixin):
                 cursor = max(0, cursor - 1)
             elif keycode == Screen.KEY_RIGHT:
                 cursor = min(len(possible_locations) - 1, cursor + 1)
+            elif keycode in (ord('d'), ord('D')):
+                self.show_deck_explorer()
         return possible_locations[cursor]
 
     def move_to(self, loc: Location) -> None:
