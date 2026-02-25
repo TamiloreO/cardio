@@ -7,7 +7,7 @@ from ..locations.location import Location
 from .constants import Color
 from .agent_primitives import HumanStateWidget
 from .tuibase import TUIBaseMixin
-from .deck_explorer import DeckExplorer
+from .deck_explorer import DeckExplorerView
 
 
 class TUIMapView(TUIBaseMixin):
@@ -96,10 +96,9 @@ class TUIMapView(TUIBaseMixin):
 
     def open_deck_explorer(self) -> None:
         """Open the deck explorer to view main deck and collection."""
-        explorer = DeckExplorer(
-            self.screen,
-            self.humanplayer.deck,
-            self.humanplayer.collection,
+        explorer = DeckExplorerView(
+            self.humanplayer,
+            screen=self.screen,
             title="Deck Explorer",
         )
         explorer.show()
