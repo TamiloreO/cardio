@@ -97,10 +97,10 @@ class TUIMapView(TUIBaseMixin):
     def open_deck_explorer(self) -> None:
         """Open the deck explorer to view main deck and collection."""
         explorer = DeckExplorer(
-            self.screen,
-            self.humanplayer.deck,
-            self.humanplayer.collection,
+            deck=self.humanplayer.deck,
+            collection=self.humanplayer.collection,
             title="Deck Explorer",
+            screen=self.screen,
         )
         explorer.show()
 

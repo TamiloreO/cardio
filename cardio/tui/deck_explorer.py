@@ -1,26 +1,53 @@
-from typing import List
+from typing import List, Optional, Protocol
 from asciimatics.screen import Screen
 from cardio import Card, Deck
 from .utils import get_keycode, dPos, show_text
-from .constants import Color, BOX_WIDTH, BOX_HEIGHT, BOX_PADDING_LEFT, BOX_PADDING_TOP
-from .card_primitives import VisualState, show_card
+from .constants import Color
+from .card_picker import CardPicker
+from .tuibase import TUIBaseMixin
 
 
-class DeckExplorer:
+class DeckExplorerView(Protocol):
+    """Protocol for DeckExplorer views, enabling dependency injection for testing."""
+
+    def show(self) -> None: ...
+    def close(self) -> None: ...
+    def message(self, msg: str) -> None: ...
+
+
+class DeckExplorer(TUIBaseMixin):
     """A read-only view for exploring cards in a deck or collection."""
 
     def __init__(
-        self, screen: Screen, deck: Deck, collection: Deck, title: str = "Deck Explorer"
+        self,
+        deck: Deck,
+        collection: Deck,
+        title: str = "Deck Explorer",
+        screen: Optional[Screen] = None,
+        *args,
+        **kwargs,
     ) -> None:
-        self.screen = screen
+        if screen is not None:
+            # Use provided screen (for reusing existing screen from mapview)
+            self.screen = screen
+            self.debug = kwargs.get("debug", False)
+            self._owns_screen = False
+        else:
+            # Create own screen via TUIBaseMixin
+            super().__init__(*args, **kwargs)
+            self._owns_screen = True
+
         self.deck = deck
         self.collection = collection
         self.title = title
-        self.gross_width = BOX_WIDTH + BOX_PADDING_LEFT
-        self.gross_height = BOX_HEIGHT + BOX_PADDING_TOP + 1
-        self.cardsperline = (self.screen.width - 4) // self.gross_width
-        self.header_height = 3
-        self.showing_deck = True  # True = deck, False = collection
+        self.showing_deck = True
+        self._card_picker: Optional[CardPicker] = None
+        self._update_card_picker()
+
+    def _update_card_picker(self) -> None:
+        """Update the CardPicker with current deck's cards."""
+        cards = self._get_current_cards()
+        self._card_picker = CardPicker(self.screen, cards) if cards else None
 
     def _get_current_cards(self) -> List[Card]:
         return self.deck.cards if self.showing_deck else self.collection.cards
@@ -33,14 +60,8 @@ class DeckExplorer:
         else:
             return f"{deck_label}  |  ${{{Color.YELLOW.value}}}{collection_label}${{7}}"
 
-    def dpos_from_cardindex(self, idx: int) -> dPos:
-        x = 2 + (idx % self.cardsperline) * self.gross_width
-        y = self.header_height + (idx // self.cardsperline) * self.gross_height
-        return dPos(x, y)
-
-    def redraw(self, cursor: int = 0, scroll_offset: int = 0) -> None:
-        self.screen.clear_buffer(0, 0, 0)
-
+    def _draw_header(self) -> None:
+        """Draw the header with title and tab labels."""
         show_text(self.screen, dPos(2, 0), self.title, color=Color.CYAN)
         show_text(self.screen, dPos(2, 1), self._get_tab_label())
         show_text(
@@ -50,66 +71,52 @@ class DeckExplorer:
             color=Color.GRAY,
         )
 
+    def _draw_empty_message(self) -> None:
+        """Draw message when deck is empty."""
+        label = "Main Deck" if self.showing_deck else "Collection"
+        show_text(
+            self.screen,
+            dPos(2, 5),
+            f"No cards in {label}",
+            color=Color.GRAY,
+        )
+
+    def redraw(self, cursor: int = 0) -> None:
+        """Redraw the entire view."""
+        self.screen.clear_buffer(0, 0, 0)
+        self._draw_header()
+
         cards = self._get_current_cards()
         if not cards:
-            show_text(
-                self.screen,
-                dPos(2, self.header_height + 2),
-                "No cards in this deck",
-                color=Color.GRAY,
-            )
-        else:
-            max_visible_rows = (self.screen.height - self.header_height - 2) // self.gross_height
-            max_visible = max_visible_rows * self.cardsperline
-
-            for i, card in enumerate(cards):
-                if i < scroll_offset * self.cardsperline:
-                    continue
-                visible_idx = i - scroll_offset * self.cardsperline
-                if visible_idx >= max_visible:
-                    break
-
-                pos = self.dpos_from_cardindex(visible_idx)
-                if pos.y + BOX_HEIGHT > self.screen.height - 1:
-                    break
-
-                state = VisualState.CURSOR if i == cursor else VisualState.NORMAL
-                show_card(self.screen, card, pos, state)
-
-            total_rows = (len(cards) + self.cardsperline - 1) // self.cardsperline
-            if total_rows > max_visible_rows:
-                show_text(
-                    self.screen,
-                    dPos(2, self.screen.height - 1),
-                    f"Showing rows {scroll_offset + 1}-{min(scroll_offset + max_visible_rows, total_rows)} of {total_rows} (↑↓ to scroll)",
-                    color=Color.GRAY,
-                )
+            self._draw_empty_message()
+        elif self._card_picker:
+            # Use CardPicker's redraw but we need to handle the header offset
+            # CardPicker.redraw clears the buffer, so we redraw header after
+            self._card_picker.redraw(cards, cursor)
+            self._draw_header()
 
         self.screen.refresh()
+
+    def _switch_tab(self, to_deck: bool) -> None:
+        """Switch between deck and collection tabs."""
+        if self.showing_deck != to_deck:
+            self.showing_deck = to_deck
+            self._update_card_picker()
 
     def show(self) -> None:
         """Show the deck explorer and allow navigation. Press ESC to close."""
         cursor = 0
-        scroll_offset = 0
 
         while True:
             cards = self._get_current_cards()
-            max_visible_rows = (self.screen.height - self.header_height - 2) // self.gross_height
 
-            # Adjust cursor if it's out of bounds after switching tabs
+            # Adjust cursor if out of bounds
             if cards:
                 cursor = min(cursor, len(cards) - 1)
             else:
                 cursor = 0
 
-            # Adjust scroll to keep cursor visible
-            cursor_row = cursor // self.cardsperline
-            if cursor_row < scroll_offset:
-                scroll_offset = cursor_row
-            elif cursor_row >= scroll_offset + max_visible_rows:
-                scroll_offset = cursor_row - max_visible_rows + 1
-
-            self.redraw(cursor, scroll_offset)
+            self.redraw(cursor)
             keycode = get_keycode(self.screen)
 
             if keycode is None:
@@ -119,22 +126,26 @@ class DeckExplorer:
                 break
 
             if keycode in (ord("d"), ord("D")):
-                self.showing_deck = True
+                self._switch_tab(to_deck=True)
                 cursor = 0
-                scroll_offset = 0
             elif keycode in (ord("c"), ord("C")):
-                self.showing_deck = False
+                self._switch_tab(to_deck=False)
                 cursor = 0
-                scroll_offset = 0
-            elif keycode == Screen.KEY_LEFT and cards:
-                cursor = max(0, cursor - 1)
-            elif keycode == Screen.KEY_RIGHT and cards:
-                cursor = min(len(cards) - 1, cursor + 1)
-            elif keycode == Screen.KEY_UP and cards:
-                new_cursor = cursor - self.cardsperline
-                if new_cursor >= 0:
-                    cursor = new_cursor
-            elif keycode == Screen.KEY_DOWN and cards:
-                new_cursor = cursor + self.cardsperline
-                if new_cursor < len(cards):
-                    cursor = new_cursor
+            elif cards and self._card_picker:
+                if keycode == Screen.KEY_LEFT:
+                    cursor = max(0, cursor - 1)
+                elif keycode == Screen.KEY_RIGHT:
+                    cursor = min(len(cards) - 1, cursor + 1)
+                elif keycode == Screen.KEY_UP:
+                    new_cursor = cursor - self._card_picker.cardsperline
+                    if new_cursor >= 0:
+                        cursor = new_cursor
+                elif keycode == Screen.KEY_DOWN:
+                    new_cursor = cursor + self._card_picker.cardsperline
+                    if new_cursor < len(cards):
+                        cursor = new_cursor
+
+    def close(self) -> None:
+        """Close the view if we own the screen."""
+        if self._owns_screen:
+            super().close()
