@@ -4,16 +4,11 @@ from typing import Literal, Optional, Tuple, Union
 
 # Line style constants (from asciimatics 1.14+)
 try:
-    # Line style constants (from asciimatics 1.14+)
-try:
     from asciimatics.constants import DOUBLE_LINE, SINGLE_LINE
 except ImportError:
     SINGLE_LINE = 1
     DOUBLE_LINE = 2
 
-except ImportError:
-    SINGLE_LINE = 1
-    DOUBLE_LINE = 2
 
 from asciimatics.effects import Print
 from asciimatics.paths import Path

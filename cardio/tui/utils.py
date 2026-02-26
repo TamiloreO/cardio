@@ -10,12 +10,7 @@ from asciimatics.renderers import StaticRenderer, Box, Renderer
 from asciimatics.event import KeyboardEvent
 # SINGLE_LINE style constant for Box renderer (value from asciimatics 1.14+)
 try:
-    # SINGLE_LINE style constant for Box renderer (value from asciimatics 1.14+)
-try:
     from asciimatics.constants import SINGLE_LINE
-except ImportError:
-    SINGLE_LINE = 1  # Default single line box style
-
 except ImportError:
     SINGLE_LINE = 1  # Default single line box style
 
