@@ -8,7 +8,17 @@ from asciimatics.screen import Screen
 from asciimatics.effects import Print
 from asciimatics.renderers import StaticRenderer, Box, Renderer
 from asciimatics.event import KeyboardEvent
-from asciimatics.constants import SINGLE_LINE
+# SINGLE_LINE style constant for Box renderer (value from asciimatics 1.14+)
+try:
+    # SINGLE_LINE style constant for Box renderer (value from asciimatics 1.14+)
+try:
+    from asciimatics.constants import SINGLE_LINE
+except ImportError:
+    SINGLE_LINE = 1  # Default single line box style
+
+except ImportError:
+    SINGLE_LINE = 1  # Default single line box style
+
 from .constants import *
 from .bufferutils import BufferCopy
 from cardio import GridPos
