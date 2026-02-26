@@ -7,7 +7,7 @@ Note: These tests require asciimatics >= 1.14.0 for SINGLE_LINE/DOUBLE_LINE cons
 """
 
 import pytest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, call
 
 # Skip all tests in this module if asciimatics constants are not available
 try:
@@ -60,7 +60,7 @@ class TestDeckExplorerInit:
         assert explorer.collection is collection
         assert explorer.screen is mock_screen
         assert explorer.showing_deck is True
-        assert explorer._owns_screen is False
+        assert explorer._provided_screen is mock_screen
 
     def test_init_with_empty_decks(self, mock_screen):
         from cardio.tui.deck_explorer import DeckExplorer
@@ -76,7 +76,6 @@ class TestDeckExplorerInit:
 
         assert explorer.deck.size() == 0
         assert explorer.collection.size() == 0
-        assert explorer._card_picker is None
 
     def test_init_with_custom_title(self, mock_screen):
         from cardio.tui.deck_explorer import DeckExplorer
@@ -92,6 +91,18 @@ class TestDeckExplorerInit:
         )
 
         assert explorer.title == "Custom Title"
+
+    def test_init_calculates_layout(self, mock_screen):
+        from cardio.tui.deck_explorer import DeckExplorer
+
+        deck = Deck("main", create_test_cards(3))
+        collection = Deck("collection")
+
+        explorer = DeckExplorer(deck=deck, collection=collection, screen=mock_screen)
+
+        assert explorer.cards_per_row > 0
+        assert explorer.visible_rows > 0
+        assert explorer.scroll_offset == 0
 
 
 class TestDeckExplorerCardAccess:
@@ -153,32 +164,18 @@ class TestDeckExplorerTabSwitching:
 
         assert explorer.showing_deck is True
 
-    def test_switch_updates_card_picker(self, mock_screen):
+    def test_switch_resets_scroll_offset(self, mock_screen):
         from cardio.tui.deck_explorer import DeckExplorer
 
         deck = Deck("main", create_test_cards(3))
         collection = Deck("collection", create_test_cards(5))
 
         explorer = DeckExplorer(deck=deck, collection=collection, screen=mock_screen)
-        original_picker = explorer._card_picker
+        explorer.scroll_offset = 5  # Simulate scrolled state
 
         explorer._switch_tab(to_deck=False)
 
-        assert explorer._card_picker is not original_picker
-        assert explorer._card_picker.cards == collection.cards
-
-    def test_switch_to_empty_deck_sets_picker_to_none(self, mock_screen):
-        from cardio.tui.deck_explorer import DeckExplorer
-
-        deck = Deck("main", create_test_cards(3))
-        collection = Deck("collection")  # Empty
-
-        explorer = DeckExplorer(deck=deck, collection=collection, screen=mock_screen)
-        assert explorer._card_picker is not None
-
-        explorer._switch_tab(to_deck=False)
-
-        assert explorer._card_picker is None
+        assert explorer.scroll_offset == 0
 
 
 class TestDeckExplorerNavigation:
@@ -319,6 +316,101 @@ class TestDeckExplorerNavigation:
         assert cursor_values[-1] == 2
 
 
+class TestDeckExplorerScrolling:
+    """Tests for vertical scrolling functionality."""
+
+    def test_scroll_offset_adjusts_when_cursor_moves_down(self, mock_screen):
+        from cardio.tui.deck_explorer import DeckExplorer
+
+        # Create enough cards to require scrolling (more than visible_rows * cards_per_row)
+        deck = Deck("main", create_test_cards(50))
+        collection = Deck("collection")
+
+        explorer = DeckExplorer(deck=deck, collection=collection, screen=mock_screen)
+        
+        # Set cursor to a position that would be off-screen
+        cursor = explorer.visible_rows * explorer.cards_per_row + 1
+        explorer._adjust_scroll_for_cursor(cursor)
+
+        assert explorer.scroll_offset > 0
+
+    def test_scroll_offset_adjusts_when_cursor_moves_up(self, mock_screen):
+        from cardio.tui.deck_explorer import DeckExplorer
+
+        deck = Deck("main", create_test_cards(50))
+        collection = Deck("collection")
+
+        explorer = DeckExplorer(deck=deck, collection=collection, screen=mock_screen)
+        explorer.scroll_offset = 3  # Start scrolled down
+        
+        # Move cursor to first row
+        cursor = 0
+        explorer._adjust_scroll_for_cursor(cursor)
+
+        assert explorer.scroll_offset == 0
+
+    def test_down_arrow_scrolls_when_needed(self, mock_screen):
+        from cardio.tui.deck_explorer import DeckExplorer
+        from asciimatics.screen import Screen
+
+        # Create many cards to require scrolling
+        deck = Deck("main", create_test_cards(100))
+        collection = Deck("collection")
+
+        explorer = DeckExplorer(deck=deck, collection=collection, screen=mock_screen)
+        scroll_values = []
+
+        original_redraw = explorer.redraw
+        def capture_scroll(cursor=0):
+            scroll_values.append(explorer.scroll_offset)
+        explorer.redraw = capture_scroll
+
+        with patch('cardio.tui.deck_explorer.get_keycode') as mock_keycode:
+            # Press down many times to trigger scrolling
+            num_downs = explorer.visible_rows + 2
+            mock_keycode.side_effect = [Screen.KEY_DOWN] * num_downs + [27]
+            explorer.show()
+
+        # Scroll should have increased at some point
+        assert max(scroll_values) > 0
+
+    def test_get_total_rows_calculation(self, mock_screen):
+        from cardio.tui.deck_explorer import DeckExplorer
+
+        deck = Deck("main", create_test_cards(25))
+        collection = Deck("collection")
+
+        explorer = DeckExplorer(deck=deck, collection=collection, screen=mock_screen)
+        
+        expected_rows = (25 + explorer.cards_per_row - 1) // explorer.cards_per_row
+        assert explorer._get_total_rows() == expected_rows
+
+    def test_get_total_rows_empty_deck(self, mock_screen):
+        from cardio.tui.deck_explorer import DeckExplorer
+
+        deck = Deck("main")
+        collection = Deck("collection")
+
+        explorer = DeckExplorer(deck=deck, collection=collection, screen=mock_screen)
+        
+        assert explorer._get_total_rows() == 0
+
+    def test_cursor_to_row_conversion(self, mock_screen):
+        from cardio.tui.deck_explorer import DeckExplorer
+
+        deck = Deck("main", create_test_cards(20))
+        collection = Deck("collection")
+
+        explorer = DeckExplorer(deck=deck, collection=collection, screen=mock_screen)
+        
+        # First row
+        assert explorer._cursor_to_row(0) == 0
+        assert explorer._cursor_to_row(explorer.cards_per_row - 1) == 0
+        
+        # Second row
+        assert explorer._cursor_to_row(explorer.cards_per_row) == 1
+
+
 class TestDeckExplorerEmptyDecks:
     """Tests for handling empty decks."""
 
@@ -401,7 +493,7 @@ class TestDeckExplorerClose:
         collection = Deck("collection")
 
         explorer = DeckExplorer(deck=deck, collection=collection, screen=mock_screen)
-        assert explorer._owns_screen is False
+        assert explorer._provided_screen is mock_screen
 
         explorer.close()
 
@@ -413,15 +505,17 @@ class TestMapViewDeckExplorerIntegration:
     """Tests for opening deck explorer from map view."""
 
     def test_d_key_opens_deck_explorer_from_mapview(self, mock_screen):
-        """Test that pressing D in map view opens the deck explorer."""
+        """Test that pressing D key in map view opens the deck explorer."""
+        from asciimatics.screen import Screen
+        
         with patch('cardio.tui.mapview.DeckExplorer') as MockDeckExplorer:
             mock_explorer_instance = Mock()
             MockDeckExplorer.return_value = mock_explorer_instance
 
             from cardio.tui.mapview import TUIMapView
             from cardio import HumanPlayer, Deck
+            from cardio.run import Run
 
-            # Create minimal test setup
             human = HumanPlayer(name="Test")
             human.deck = Deck("main", create_test_cards(3))
             human.collection = Deck("collection", create_test_cards(5))
@@ -431,15 +525,87 @@ class TestMapViewDeckExplorerIntegration:
                 mapview.screen = mock_screen
                 mapview.humanplayer = human
                 mapview.debug = False
+                mapview.run = Mock()
+                mapview.run.get_accessible_locations.return_value = [Mock()]
+                mapview.run.current_index = 0
 
-                mapview.open_deck_explorer()
+                with patch('cardio.tui.mapview.get_keycode') as mock_keycode:
+                    with patch.object(mapview, 'redraw'):
+                        # Simulate: D key press, then Enter to select location
+                        mock_keycode.side_effect = [ord('d'), 13]
+                        mapview.get_next_location()
 
-                # Verify DeckExplorer was created with correct arguments
+                # Verify DeckExplorer was created and shown
                 MockDeckExplorer.assert_called_once()
                 call_kwargs = MockDeckExplorer.call_args[1]
                 assert call_kwargs['deck'] is human.deck
                 assert call_kwargs['collection'] is human.collection
                 assert call_kwargs['screen'] is mock_screen
-
-                # Verify show() was called
                 mock_explorer_instance.show.assert_called_once()
+
+    def test_uppercase_d_key_also_opens_explorer(self, mock_screen):
+        """Test that uppercase D also opens the deck explorer."""
+        from asciimatics.screen import Screen
+        
+        with patch('cardio.tui.mapview.DeckExplorer') as MockDeckExplorer:
+            mock_explorer_instance = Mock()
+            MockDeckExplorer.return_value = mock_explorer_instance
+
+            from cardio.tui.mapview import TUIMapView
+            from cardio import HumanPlayer, Deck
+
+            human = HumanPlayer(name="Test")
+            human.deck = Deck("main", create_test_cards(3))
+            human.collection = Deck("collection", create_test_cards(5))
+
+            with patch.object(TUIMapView, '__init__', lambda self, *args, **kwargs: None):
+                mapview = TUIMapView.__new__(TUIMapView)
+                mapview.screen = mock_screen
+                mapview.humanplayer = human
+                mapview.debug = False
+                mapview.run = Mock()
+                mapview.run.get_accessible_locations.return_value = [Mock()]
+                mapview.run.current_index = 0
+
+                with patch('cardio.tui.mapview.get_keycode') as mock_keycode:
+                    with patch.object(mapview, 'redraw'):
+                        # Simulate: uppercase D key press, then Enter
+                        mock_keycode.side_effect = [ord('D'), 13]
+                        mapview.get_next_location()
+
+                MockDeckExplorer.assert_called_once()
+                mock_explorer_instance.show.assert_called_once()
+
+
+class TestDeckExplorerRedraw:
+    """Tests for redraw behavior to ensure no flickering."""
+
+    def test_redraw_clears_buffer_once(self, mock_screen):
+        from cardio.tui.deck_explorer import DeckExplorer
+
+        deck = Deck("main", create_test_cards(3))
+        collection = Deck("collection")
+
+        explorer = DeckExplorer(deck=deck, collection=collection, screen=mock_screen)
+
+        with patch('cardio.tui.deck_explorer.show_text'):
+            with patch('cardio.tui.deck_explorer.show_card'):
+                explorer.redraw(cursor=0)
+
+        # clear_buffer should be called exactly once per redraw
+        assert mock_screen.clear_buffer.call_count == 1
+
+    def test_redraw_refreshes_once(self, mock_screen):
+        from cardio.tui.deck_explorer import DeckExplorer
+
+        deck = Deck("main", create_test_cards(3))
+        collection = Deck("collection")
+
+        explorer = DeckExplorer(deck=deck, collection=collection, screen=mock_screen)
+
+        with patch('cardio.tui.deck_explorer.show_text'):
+            with patch('cardio.tui.deck_explorer.show_card'):
+                explorer.redraw(cursor=0)
+
+        # refresh should be called exactly once per redraw
+        assert mock_screen.refresh.call_count == 1
