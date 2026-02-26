@@ -32,18 +32,7 @@ class DeckExplorer(TUIBaseMixin):
         *args,
         **kwargs,
     ) -> None:
-        if screen is not None:
-            self._external_screen = screen
-        else:
-            self._external_screen = None
-        
-        super().__init__(*args, **kwargs)
-        
-        if self._external_screen is not None:
-            self.screen = self._external_screen
-            self._owns_screen = False
-        else:
-            self._owns_screen = True
+        super().__init__(screen=screen, *args, **kwargs)
 
         self.deck = deck
         self.collection = collection
@@ -189,7 +178,4 @@ class DeckExplorer(TUIBaseMixin):
                     if new_cursor < len(cards):
                         cursor = new_cursor
 
-    def close(self) -> None:
-        """Close the view if we own the screen."""
-        if self._owns_screen:
-            super().close()
+
