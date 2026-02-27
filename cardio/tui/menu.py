@@ -1,47 +1,53 @@
 """cardio.tui.menu — Main-menu TUI screen.
 
-Presents two choices to the player before a run starts:
+Presents three choices to the player before a run starts:
 
-  1. **vs Computer** – the classic single-player mode.  Returns immediately.
-  2. **vs Online Multiplayer** – opens the lobby browser (see
+  1. **vs Computer** – the classic single-player mode.
+  2. **vs LAN Multiplayer** – opens the lobby browser (see
      :class:`~cardio.tui.lobby_view.TUILobbyView`).
+  3. **Exit** – quit the application cleanly from the main menu.
 
 Navigation
 ----------
-- ``↑`` / ``↓``  move the cursor between the two options.
-- ``Enter``       confirms the highlighted option.
+- ``↑`` / ``↓``  move the cursor between items.
+- ``Enter``       confirms the highlighted item.
 
 Return value
 ------------
-``show()`` returns one of two string literals:
+``show()`` returns one of three string literals:
 
 ``"computer"``
     The player chose to fight the computer AI.
 
 ``"multiplayer"``
-    The player chose multiplayer.  By the time ``show()`` returns the lobby handshake
-    is *not yet done* — the caller must subsequently open
+    The player chose LAN multiplayer.  By the time ``show()`` returns the lobby
+    handshake is *not yet done* — the caller must subsequently open
     :class:`~cardio.tui.lobby_view.TUILobbyView` to complete the connection.
+
+``"exit"``
+    The player chose to quit.  The caller should call ``sys.exit(0)``.
 
 Layout
 ------
 The menu is drawn on the same :class:`~asciimatics.screen.Screen` instance that was
 already opened by :class:`~cardio.tui.tuibase.TUIBaseMixin`.  The title is rendered
 with the *doh* Figlet font (the same font used elsewhere in the game for short
-messages) and the two menu items are displayed below it in a simple cursor-highlighted
-list.
+messages) and the three menu items are displayed below it in a simple
+cursor-highlighted list.
 """
 
 from __future__ import annotations
 
-from typing import Literal, List
+from typing import Literal
 
 from asciimatics.screen import Screen
+
 from asciimatics.renderers import FigletText
 
 from cardio.tui.tuibase import TUIBaseMixin
 from cardio.tui.utils import dPos, show_text, get_keycode
 from cardio.tui.constants import Color
+from cardio.tui.menu_constants import ITEMS as _ITEMS, TOKENS as _TOKENS
 
 # ── layout constants ───────────────────────────────────────────────────────────
 
@@ -54,14 +60,6 @@ _TITLE_Y_OFFSET = -10
 # Spacing between menu items (in rows).
 _ITEM_SPACING = 2
 
-# String labels for each option.
-_ITEMS: List[str] = [
-    "  vs Computer  ",
-    "  vs Online Multiplayer  ",
-]
-
-# Corresponding return tokens.
-_TOKENS: List[Literal["computer", "multiplayer"]] = ["computer", "multiplayer"]
 
 
 class TUIMenu(TUIBaseMixin):
@@ -82,10 +80,10 @@ class TUIMenu(TUIBaseMixin):
 
     # ── public API ─────────────────────────────────────────────────────────────
 
-    def show(self) -> Literal["computer", "multiplayer"]:
+    def show(self) -> Literal["computer", "multiplayer", "exit"]:
         """Render the menu and block until the player confirms a choice.
 
-        Returns ``"computer"`` or ``"multiplayer"``.
+        Returns ``"computer"``, ``"multiplayer"``, or ``"exit"``.
         """
         cursor = 0
         while True:
@@ -136,13 +134,16 @@ class TUIMenu(TUIBaseMixin):
         for i, label in enumerate(_ITEMS):
             y = items_start_y + i * _ITEM_SPACING
             if i == cursor:
-                # Highlighted item: wrap in angle-bracket decoration and use MAGENTA.
+                # Highlighted item: wrap in arrow decoration and use MAGENTA.
+                # The Exit item uses RED to make its destructive nature obvious.
                 display = f"▶  {label.strip()}  ◀"
-                col = Color.MAGENTA
+                col = Color.RED if _TOKENS[i] == "exit" else Color.MAGENTA
             else:
                 display = f"   {label.strip()}   "
-                col = Color.WHITE
+                # Unhighlighted Exit is dimmed (GRAY) to de-emphasise it.
+                col = Color.GRAY if _TOKENS[i] == "exit" else Color.WHITE
             x = cx - len(display) // 2
             show_text(self.screen, dPos(x, y), display, color=col)
 
         self.screen.refresh()
+

@@ -7,6 +7,10 @@ and JSON decode path, not just a mock.
 RemoteStrategy.cards_to_be_played() is tested both after a real network exchange and
 directly (by populating _pending manually) to isolate the data-transformation logic
 from the network layer.
+
+ConnectionError propagation is tested by closing the remote socket while
+fetch_remote_cards is blocked, which reproduces the mid-fight disconnection scenario
+that NetworkFightVnC catches and converts to PeerDisconnectedError.
 """
 
 import socket
@@ -18,6 +22,7 @@ from cardio.card import Card
 from cardio import skills
 from cardio.net.network_strategy import RemoteStrategy
 from cardio.net.protocol import send_message, make_fight_cards_msg, serialise_card_placement
+
 
 
 # ── fixtures ───────────────────────────────────────────────────────────────────
@@ -213,6 +218,30 @@ class TestFetchRemoteCards:
         assert strat._pending == []
         cli.close()
         srv.close()
+
+    def test_fetch_raises_connection_error_when_remote_closes(self, initialized_fight):
+        """Closing the remote socket while blocked in recv must raise ConnectionError.
+
+        This is the raw protocol-level signal that NetworkFightVnC then converts into
+        PeerDisconnectedError so play.py can handle it cleanly.
+        """
+        _, grid = initialized_fight
+        cli, srv = _loopback_pair()
+        strat = RemoteStrategy(sock=srv, grid=grid)
+
+        # Close the sending side without sending anything — simulates a peer crash.
+        def _disconnect():
+            cli.close()
+
+        t = threading.Thread(target=_disconnect, daemon=True)
+        t.start()
+
+        with pytest.raises(ConnectionError):
+            strat.fetch_remote_cards()
+
+        t.join(timeout=2)
+        srv.close()
+
 
 
 # ── cards_to_be_played ─────────────────────────────────────────────────────────

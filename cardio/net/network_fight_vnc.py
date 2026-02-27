@@ -37,17 +37,42 @@ To know *which* cards are new in line 2 each round (step 1), the controller snap
 line 2 at the *start* of the human-play phase and diffs it against line 2 at the *end*.
 Only newly appearing cards are transmitted; cards that were already present in a prior
 round are not re-sent.
+
+Disconnection handling
+----------------------
+Any ``ConnectionError`` raised during send or receive (steps 2 and 3) is caught inside
+:meth:`_handle_round_of_fight` and converted to a :class:`PeerDisconnectedError`.
+:meth:`handle_fight` catches that exception, displays a message to the local player,
+and re-raises it so the caller (``play.py``) can return the player to the main menu
+instead of crashing.
+
+Turn hints
+----------
+Two short status lines are displayed at the very top of the fight screen (row 1) to
+keep both players aware of what is expected of them:
+
+- **"Your turn — play cards, then press C"** is shown while the local player is in
+  the card-play phase (steps 3–4).
+- **"Waiting for opponent…"** is shown while the controller is blocked on the network
+  receive (step 7), so the local player knows the delay is intentional.
+
+Both hints are written to ``dPos(1, 1)`` — a row above the grid that is never
+touched by the normal fight rendering — and are naturally erased by the first full
+``redraw_view()`` call that follows.
 """
 
 from __future__ import annotations
 
 import logging
 import socket
-from typing import Dict, List, Optional, Set
+from typing import List, Set
 
 from cardio import FightCard, Grid, GridPos
 from cardio.tui.locations.fightview import TUIFightVnC
+from cardio.tui.utils import dPos, show_text
+from cardio.tui.constants import Color
 from cardio.net.network_strategy import RemoteStrategy
+from cardio.net.exceptions import PeerDisconnectedError
 from cardio.net.protocol import (
     send_message,
     recv_message,
@@ -57,11 +82,28 @@ from cardio.net.protocol import (
     MSG_FIGHT_DONE,
 )
 
+
 log = logging.getLogger(__name__)
 
 # Line index for each player on the local grid.
 _HUMAN_LINE = 2
 _COMPUTER_LINE = 1  # Where remote-player cards land (skipping the prep line).
+
+# Convert the raw tuple from the constants module into a dPos for show_text calls.
+_HINT_POS = dPos(*_HINT_POS_RAW)
+
+
+# Screen position for the turn-status hint (above the grid, never overwritten by
+# the normal fight renderer).
+_HINT_POS = dPos(1, 1)
+_HINT_CLEAR = " " * 60  # Enough spaces to overwrite any previous hint text.
+
+
+# PeerDisconnectedError is imported from cardio.net.exceptions (re-exported here
+# so callers such as play.py can import it from this module as before).
+__all__ = ["NetworkFightVnC", "PeerDisconnectedError"]
+
+
 
 
 class NetworkFightVnC(TUIFightVnC):
@@ -108,10 +150,11 @@ class NetworkFightVnC(TUIFightVnC):
 
         The activation logic (lines activating, damage, skills) runs identically to the
         single-player path because it is fully deterministic given the grid state.
+
+        Raises :class:`PeerDisconnectedError` if the remote peer drops the connection
+        during the send or receive phases of this round.
         """
         log.debug("=== Network round %d start ===", self.round_num)
-        from cardio.fightvnc import EndOfFightException
-        from cardio.states_logger import StatesLogger
 
         self.stateslogger.log_current_state()
         self.decks.log()
@@ -132,14 +175,16 @@ class NetworkFightVnC(TUIFightVnC):
             if card is not None
         }
 
-        # ── step 3: human draws a card ─────────────────────────────────────────
+        # ── step 3–4: human draws and plays cards ─────────────────────────────
+        # Show the "your turn" hint so the player knows they are expected to act.
+        self._show_hint("⚔  Your turn — play cards, then press C")
+
         deck = self.handle_human_choose_deck_to_draw_from()
         if deck is not None:
             card = deck.draw_card()
             self.show_human_draws_new_card(self.decks.hand, card, deck)
             self.decks.hand.add_card(card)
 
-        # ── step 4: human plays cards (normal single-player interaction) ───────
         self.handle_human_plays_cards(place_card_callback=self._place_card)
 
         # ── step 5: collect newly placed cards from line 2 ────────────────────
@@ -147,12 +192,20 @@ class NetworkFightVnC(TUIFightVnC):
 
         # ── step 6: send our placements to the opponent ────────────────────────
         payload = [serialise_card_placement(slot, card) for slot, card in new_cards]
-        send_message(self._sock, make_fight_cards_msg(payload))
+        try:
+            send_message(self._sock, make_fight_cards_msg(payload))
+        except ConnectionError as exc:
+            raise PeerDisconnectedError(str(exc)) from exc
         log.debug("Sent %d card placement(s) to opponent.", len(payload))
 
         # ── step 7: receive the opponent's placements ──────────────────────────
         # This blocks until the remote side sends its FIGHT_CARDS message.
-        self._remote_strategy.fetch_remote_cards()
+        # Show the waiting hint so the player knows the pause is intentional.
+        self._show_hint("⏳  Waiting for opponent…")
+        try:
+            self._remote_strategy.fetch_remote_cards()
+        except ConnectionError as exc:
+            raise PeerDisconnectedError(str(exc)) from exc
         # Inject received cards into the grid (line 1) via the normal play_cards path.
         self._remote_strategy.play_cards(self.round_num)
         # Track which ids are new so we can animate them at the top of the next round.
@@ -188,12 +241,28 @@ class NetworkFightVnC(TUIFightVnC):
         self.grid.log()
         log.debug("=== Network round %d end ===", self.round_num)
 
+
     def handle_fight(self) -> None:
-        """Override to initialise tracking state before delegating to parent."""
+        """Override to initialise tracking state before delegating to parent.
+
+        Catches :class:`PeerDisconnectedError` raised by
+        :meth:`_handle_round_of_fight`, shows the player an informative message, and
+        re-raises so ``play.py`` can return to the main menu.
+        """
         # Initialise the set that _handle_round_of_fight reads on the very first round.
         self._new_remote_card_ids: Set[int] = set()
-        # Run the normal fight loop (which calls our overridden _handle_round_of_fight).
-        super().handle_fight()
+        try:
+            # Run the normal fight loop (which calls our overridden
+            # _handle_round_of_fight).
+            super().handle_fight()
+        except PeerDisconnectedError:
+            # Show a clear message before propagating — the screen is still open at
+            # this point so self.message() works correctly.
+            self.message(
+                "Opponent disconnected. 🔌\n"
+                "Returning to the main menu…"
+            )
+            raise
         # ── fight is over: exchange FIGHT_DONE so both sides close cleanly ────
         try:
             send_message(self._sock, make_fight_done_msg())
@@ -206,6 +275,20 @@ class NetworkFightVnC(TUIFightVnC):
             log.warning("Could not exchange FIGHT_DONE: %s", exc)
 
     # ── helpers ────────────────────────────────────────────────────────────────
+
+    def _show_hint(self, text: str) -> None:
+        """Write a short turn-status hint at the top of the fight screen.
+
+        The hint is painted at :data:`_HINT_POS` (row 1, column 1) — a row above the
+        fight grid that the normal fight renderer never touches.  Any previous hint is
+        first erased with a blank string of the same maximum width, then the new text
+        is drawn.  The hint is naturally cleared the next time
+        :meth:`~cardio.tui.locations.fightview.TUIFightVnC.redraw_view` runs a full
+        ``screen.clear_buffer`` at the start of the activation phase.
+        """
+        show_text(self.screen, _HINT_POS, _HINT_CLEAR, color=Color.WHITE)
+        show_text(self.screen, _HINT_POS, text, color=Color.YELLOW)
+        self.screen.refresh()
 
     def _collect_new_line2_cards(self) -> List[tuple]:
         """Return ``(slot, card)`` pairs for cards that appeared in line 2 this round.
@@ -225,3 +308,4 @@ class NetworkFightVnC(TUIFightVnC):
         for slot, card in enumerate(self.grid.lines[linei]):
             if card is not None:
                 yield slot, card
+
