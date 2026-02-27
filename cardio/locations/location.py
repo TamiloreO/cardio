@@ -37,6 +37,14 @@ class Location(ABC):
         pass
 
 
+BOSS_FIGHT_INTERVAL = 10
+
+
+def is_boss_rung(rung: int) -> bool:
+    """Check if a rung should have a boss fight."""
+    return rung > 0 and rung % BOSS_FIGHT_INTERVAL == 0
+
+
 # ----- Factory -----
 
 
@@ -45,6 +53,10 @@ def create_random_location(
 ) -> Location:
     # Importing these here to prevent circular imports:
     from .location_directory import location_frequencies
+    from .boss_fight_location import BossFightLocation
+
+    if is_boss_rung(rung):
+        return BossFightLocation(base_seed, rung, index, paths)
 
     random.seed(f"L{rung}_{index}_{base_seed}_locationfactory")
     locations, weights = zip(*location_frequencies)
