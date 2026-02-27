@@ -146,10 +146,11 @@ class TUILobbyView(TUIBaseMixin):
         cx = self.screen.width // 2
         show_text(
             self.screen,
-            dPos(cx - 11, _HEADER_Y),
-            "⚔  Online Multiplayer  ⚔",
+            dPos(cx - 10, _HEADER_Y),
+            "⚔  LAN Multiplayer  ⚔",
             color=Color.CYAN,
         )
+
         show_text(
             self.screen,
             dPos(cx - 20, _HEADER_Y + 2),

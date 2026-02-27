@@ -37,6 +37,12 @@ To know *which* cards are new in line 2 each round (step 1), the controller snap
 line 2 at the *start* of the human-play phase and diffs it against line 2 at the *end*.
 Only newly appearing cards are transmitted; cards that were already present in a prior
 round are not re-sent.
+
+Disconnection handling
+----------------------
+If the remote peer disconnects (socket closed, network error), a
+:class:`NetworkDisconnectedError` is raised.  The caller (play.py) catches this and
+returns the player to the main menu with an appropriate message.
 """
 
 from __future__ import annotations
@@ -47,6 +53,8 @@ from typing import Dict, List, Optional, Set
 
 from cardio import FightCard, Grid, GridPos
 from cardio.tui.locations.fightview import TUIFightVnC
+from cardio.tui.utils import dPos, show_text
+from cardio.tui.constants import Color
 from cardio.net.network_strategy import RemoteStrategy
 from cardio.net.protocol import (
     send_message,
@@ -62,6 +70,13 @@ log = logging.getLogger(__name__)
 # Line index for each player on the local grid.
 _HUMAN_LINE = 2
 _COMPUTER_LINE = 1  # Where remote-player cards land (skipping the prep line).
+
+
+class NetworkDisconnectedError(Exception):
+    """Raised when the remote peer disconnects during a multiplayer fight."""
+
+    pass
+
 
 
 class NetworkFightVnC(TUIFightVnC):
@@ -103,6 +118,21 @@ class NetworkFightVnC(TUIFightVnC):
 
     # ── overridden round hook ──────────────────────────────────────────────────
 
+    def _show_turn_indicator(self, whose_turn: str) -> None:
+        """Display a turn indicator at the bottom of the screen."""
+        indicator_y = self.screen.height - 2
+        cx = self.screen.width // 2
+        # Clear the line first.
+        self.screen.clear_buffer(0, 0, 0, x=0, y=indicator_y, w=self.screen.width, h=1)
+        if whose_turn == "your":
+            msg = "⚔  YOUR TURN – Play cards, then press C to end turn  ⚔"
+            color = Color.GREEN
+        else:
+            msg = "⏳  WAITING FOR OPPONENT...  ⏳"
+            color = Color.YELLOW
+        show_text(self.screen, dPos(cx - len(msg) // 2, indicator_y), msg, color=color)
+        self.screen.refresh()
+
     def _handle_round_of_fight(self) -> None:
         """Networked round: send local placements, receive remote placements, activate.
 
@@ -140,6 +170,7 @@ class NetworkFightVnC(TUIFightVnC):
             self.decks.hand.add_card(card)
 
         # ── step 4: human plays cards (normal single-player interaction) ───────
+        self._show_turn_indicator("your")
         self.handle_human_plays_cards(place_card_callback=self._place_card)
 
         # ── step 5: collect newly placed cards from line 2 ────────────────────
@@ -147,12 +178,21 @@ class NetworkFightVnC(TUIFightVnC):
 
         # ── step 6: send our placements to the opponent ────────────────────────
         payload = [serialise_card_placement(slot, card) for slot, card in new_cards]
-        send_message(self._sock, make_fight_cards_msg(payload))
+        try:
+            send_message(self._sock, make_fight_cards_msg(payload))
+        except ConnectionError as exc:
+            log.error("Failed to send cards to opponent: %s", exc)
+            raise NetworkDisconnectedError("Lost connection to opponent.") from exc
         log.debug("Sent %d card placement(s) to opponent.", len(payload))
 
         # ── step 7: receive the opponent's placements ──────────────────────────
         # This blocks until the remote side sends its FIGHT_CARDS message.
-        self._remote_strategy.fetch_remote_cards()
+        self._show_turn_indicator("opponent")
+        try:
+            self._remote_strategy.fetch_remote_cards()
+        except ConnectionError as exc:
+            log.error("Failed to receive cards from opponent: %s", exc)
+            raise NetworkDisconnectedError("Lost connection to opponent.") from exc
         # Inject received cards into the grid (line 1) via the normal play_cards path.
         self._remote_strategy.play_cards(self.round_num)
         # Track which ids are new so we can animate them at the top of the next round.
@@ -188,11 +228,13 @@ class NetworkFightVnC(TUIFightVnC):
         self.grid.log()
         log.debug("=== Network round %d end ===", self.round_num)
 
+
     def handle_fight(self) -> None:
         """Override to initialise tracking state before delegating to parent."""
         # Initialise the set that _handle_round_of_fight reads on the very first round.
         self._new_remote_card_ids: Set[int] = set()
         # Run the normal fight loop (which calls our overridden _handle_round_of_fight).
+        # NetworkDisconnectedError may propagate up from _handle_round_of_fight.
         super().handle_fight()
         # ── fight is over: exchange FIGHT_DONE so both sides close cleanly ────
         try:
@@ -204,6 +246,8 @@ class NetworkFightVnC(TUIFightVnC):
                 )
         except ConnectionError as exc:
             log.warning("Could not exchange FIGHT_DONE: %s", exc)
+            # Don't raise here - fight is already over, just log and continue.
+
 
     # ── helpers ────────────────────────────────────────────────────────────────
 

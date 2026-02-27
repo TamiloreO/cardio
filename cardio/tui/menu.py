@@ -1,19 +1,20 @@
 """cardio.tui.menu — Main-menu TUI screen.
 
-Presents two choices to the player before a run starts:
+Presents three choices to the player before a run starts:
 
   1. **vs Computer** – the classic single-player mode.  Returns immediately.
-  2. **vs Online Multiplayer** – opens the lobby browser (see
+  2. **vs LAN Multiplayer** – opens the lobby browser (see
      :class:`~cardio.tui.lobby_view.TUILobbyView`).
+  3. **Exit** – quit the application.
 
 Navigation
 ----------
-- ``↑`` / ``↓``  move the cursor between the two options.
+- ``↑`` / ``↓``  move the cursor between the options.
 - ``Enter``       confirms the highlighted option.
 
 Return value
 ------------
-``show()`` returns one of two string literals:
+``show()`` returns one of three string literals:
 
 ``"computer"``
     The player chose to fight the computer AI.
@@ -23,12 +24,15 @@ Return value
     is *not yet done* — the caller must subsequently open
     :class:`~cardio.tui.lobby_view.TUILobbyView` to complete the connection.
 
+``"exit"``
+    The player chose to quit the application.
+
 Layout
 ------
 The menu is drawn on the same :class:`~asciimatics.screen.Screen` instance that was
 already opened by :class:`~cardio.tui.tuibase.TUIBaseMixin`.  The title is rendered
 with the *doh* Figlet font (the same font used elsewhere in the game for short
-messages) and the two menu items are displayed below it in a simple cursor-highlighted
+messages) and the menu items are displayed below it in a simple cursor-highlighted
 list.
 """
 
@@ -57,11 +61,17 @@ _ITEM_SPACING = 2
 # String labels for each option.
 _ITEMS: List[str] = [
     "  vs Computer  ",
-    "  vs Online Multiplayer  ",
+    "  vs LAN Multiplayer  ",
+    "  Exit  ",
 ]
 
 # Corresponding return tokens.
-_TOKENS: List[Literal["computer", "multiplayer"]] = ["computer", "multiplayer"]
+_TOKENS: List[Literal["computer", "multiplayer", "exit"]] = [
+    "computer",
+    "multiplayer",
+    "exit",
+]
+
 
 
 class TUIMenu(TUIBaseMixin):
@@ -82,11 +92,12 @@ class TUIMenu(TUIBaseMixin):
 
     # ── public API ─────────────────────────────────────────────────────────────
 
-    def show(self) -> Literal["computer", "multiplayer"]:
+    def show(self) -> Literal["computer", "multiplayer", "exit"]:
         """Render the menu and block until the player confirms a choice.
 
-        Returns ``"computer"`` or ``"multiplayer"``.
+        Returns ``"computer"``, ``"multiplayer"``, or ``"exit"``.
         """
+
         cursor = 0
         while True:
             self._redraw(cursor)
