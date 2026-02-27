@@ -7,15 +7,12 @@ from typing import Protocol, Type
 
 from cardio import Grid
 from cardio.human_player import HumanPlayer
-from cardio.locations.location import Location
+from cardio.locations.location import Location, BOSS_FIGHT_INTERVAL
 from cardio.locations.baseview import BaseLocationView
 from cardio.computer_strategies import ComputerStrategy
 
 from .boss_catalog import BossDefinition, get_boss_for_rung
 from .boss_strategy import BossStrategy
-
-
-BOSS_FIGHT_INTERVAL = 10
 
 
 class BossFightView(BaseLocationView, Protocol):
@@ -74,8 +71,3 @@ class BossFightLocation(Location):
         vnc.handle_fight()
         vnc.close()
         return humanplayer.lives > 0
-
-
-def is_boss_rung(rung: int) -> bool:
-    """Check if a rung should have a boss fight."""
-    return rung > 0 and rung % BOSS_FIGHT_INTERVAL == 0

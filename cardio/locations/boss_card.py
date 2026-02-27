@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Optional
 from cardio import Card
 from cardio.fightcard import FightCard
 from cardio import skills as sk
-from .boss_skills import Evasion, LifeSteal, Reflective, Enrage
+from .boss_skills import Evasion, LifeSteal, Enrage
 
 if TYPE_CHECKING:
     from cardio import GridPos

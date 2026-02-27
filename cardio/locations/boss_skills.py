@@ -161,6 +161,11 @@ class Reflective(Skill):
     )
     potency: int = 5
     forwhom: ForWhom = ForWhom.COMPUTER
+    _reflect_amount: int = 1
+
+    def get_reflect_damage(self) -> int:
+        """Return the amount of damage to reflect."""
+        return self._reflect_amount
 
 
 @dataclass

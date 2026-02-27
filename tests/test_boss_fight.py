@@ -25,6 +25,7 @@ from cardio.locations.boss_catalog import (
 from cardio.locations.boss_strategy import BossStrategy
 from cardio.locations.boss_fight_location import BossFightLocation
 from cardio.locations.location import is_boss_rung, BOSS_FIGHT_INTERVAL
+from cardio.locations.boss_skills import Reflective
 
 
 class BossTestHumanStrategyVnC(FightVnC):
@@ -324,6 +325,43 @@ class TestLifeStealSkill:
         
         skill.register_damage(4)
         assert skill._damage_dealt_this_attack == 4
+
+
+class TestReflectiveSkill:
+    def test_reflective_returns_damage(self):
+        skill = Reflective()
+        assert skill.get_reflect_damage() == 1
+
+    def test_reflective_damages_attacker(self):
+        """Verify that Reflective causes damage to the attacking card."""
+        # Human card with high health to survive multiple rounds
+        hc = Card("Human Card", 2, 20, 1)
+        # Boss with low power so human survives, but has Reflective
+        boss = Card("Boss", 1, 10, 1, skills=[Reflective])
+        
+        grid = Grid(4)
+        humanplayer = HumanPlayer(name="HP", lives=1)
+        humanplayer.deck.cards = [hc]
+        
+        # Place boss in slot 0 so it opposes the human card
+        cs = Round0OnlyStrategy(grid=grid, cards=[(GridPos(1, 0), boss)])
+        vnc = BossTestHumanStrategyVnC(
+            grid=grid, computerstrategy=cs, whichrounds=[0], humanplayer=humanplayer
+        )
+        vnc.handle_fight()
+        
+        # Human card attacks boss 5 times (2 damage each = 10 total to kill boss)
+        # Each attack, human takes 1 reflect damage + 1 from boss attack (until boss dies)
+        hc_fc = hc._fc
+        boss_fc = boss._fc
+        
+        # Boss should be dead (took 2 damage per round, 5 rounds = 10 damage)
+        assert boss_fc.health == 0
+        # Human should have taken damage from both boss attacks AND reflective
+        # Without reflective, human would take 5 damage (1 per round for 5 rounds)
+        # With reflective, human takes additional damage from reflective
+        assert hc_fc.health < 15  # Took more than just boss attack damage
+        assert hc_fc.health < 20  # Confirm damage was taken
 
 
 class TestIntegration:
