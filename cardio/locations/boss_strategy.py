@@ -3,9 +3,9 @@
 Boss fights use a specialized strategy that places a single powerful
 boss card with potential minion reinforcements.
 """
-from typing import Dict, List
+from typing import List
 
-from cardio import Card, Grid, GridPos, GridPosAndCard
+from cardio import Grid, GridPos, GridPosAndCard
 from cardio.computer_strategies import ComputerStrategy
 from cardio.fightcard import FightCard
 
@@ -36,7 +36,6 @@ class BossStrategy(ComputerStrategy):
         """Place the boss in round 0, nothing after."""
         if round_number == 0 and not self._boss_placed:
             center_slot = self.grid.width // 2
-            self._boss_placed = True
             return [GridPosAndCard(GridPos(1, center_slot), self.boss_card)]
         return []
 
@@ -56,6 +55,8 @@ class BossStrategy(ComputerStrategy):
                 self._waitlist.append(GridPosAndCard(pos, card))
             else:
                 self.grid.set_card(pos, card)
+                if card.name == self.boss_definition.name:
+                    self._boss_placed = True
         
         self._waitlist = [
             item for item in self._waitlist 

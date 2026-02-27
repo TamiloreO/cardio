@@ -240,6 +240,13 @@ class FightCard(Card):
             logging.debug("%s -> %s: 1D (Spines)", target.name, self.name)
             attacker_to_lose += 1
 
+        # Check for Reflective skill on target (boss-specific)
+        if hasattr(target, 'get_reflective_damage'):
+            reflect_damage = target.get_reflective_damage()
+            if reflect_damage > 0:
+                logging.debug("%s -> %s: %sD (Reflective)", target.name, self.name, reflect_damage)
+                attacker_to_lose += reflect_damage
+
         # ----- Deal damage -----
 
         # Damage to target:

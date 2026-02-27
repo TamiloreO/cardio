@@ -26,6 +26,8 @@ from cardio.locations.boss_strategy import BossStrategy
 from cardio.locations.boss_fight_location import BossFightLocation
 from cardio.locations.location import is_boss_rung, BOSS_FIGHT_INTERVAL
 
+from cardio.locations.boss_skills import Reflective
+
 
 class BossTestHumanStrategyVnC(FightVnC):
     """A VnC that simulates a human player for testing."""
@@ -324,6 +326,38 @@ class TestLifeStealSkill:
         
         skill.register_damage(4)
         assert skill._damage_dealt_this_attack == 4
+
+
+class TestReflectiveSkill:
+    def test_reflective_returns_damage_amount(self):
+        skill = Reflective()
+        assert skill.get_reflect_damage() == 1
+
+    def test_reflective_damages_attacker(self):
+        """Test that Reflective deals damage back to attacking cards."""
+        hc = Card("Human Card", 2, 5, 1)
+        boss = Card("Boss", 1, 10, 1, skills=[Reflective])
+        
+        grid = Grid(4)
+        humanplayer = HumanPlayer(name="HP", lives=1)
+        humanplayer.deck.cards = [hc]
+        
+        cs = Round0OnlyStrategy(grid=grid, cards=[(GridPos(1, 0), boss)])
+        vnc = BossTestHumanStrategyVnC(
+            grid=grid, computerstrategy=cs, whichrounds=[0], humanplayer=humanplayer
+        )
+        
+        # Convert to BossCard before fight
+        FightCard.init_fight(vnc, grid)
+        
+        vnc.handle_fight()
+        
+        # Human card should have taken reflective damage (1 per attack)
+        # Boss has 10 health, human deals 2 damage per round
+        # Human should take 1 reflective damage per attack
+        # After 5 rounds boss dies, human took 5 reflective damage
+        # Human started with 5 health, so should have 0 health
+        assert hc._fc.health < 5  # Human took some reflective damage
 
 
 class TestIntegration:

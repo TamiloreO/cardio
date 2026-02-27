@@ -66,6 +66,12 @@ class BossCard(FightCard):
             "%s: -%sH (now at %sH)", self.name, howmuch - damage_left, self.health
         )
         return damage_left
+    
+    def get_reflective_damage(self) -> int:
+        """Return reflective damage if this boss has the Reflective skill."""
+        if Reflective in self.skills:
+            return self.skills.get(Reflective).get_reflect_damage()
+        return 0
 
     def attack(self, target: Optional[FightCard] = None) -> None:
         """Override to handle life steal damage tracking."""
