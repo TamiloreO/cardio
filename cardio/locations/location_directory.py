@@ -9,6 +9,7 @@ from .upgrader_location import (
     PowerUpgraderMultiLocation,
     HealthUpgraderMultiLocation,
 )
+from .boss_fight_location import BossFightLocation
 
 location_frequencies = [  # 1 = "base" frequency
     (NoLocation, 10),
@@ -21,11 +22,14 @@ location_frequencies = [  # 1 = "base" frequency
     (SkillLotteryLocation, 1),
 ]
 
+# Boss fights are handled separately (every 10 rungs), not via frequencies
+
 # ----- Views -----
 from cardio.tui.locations.fightview import TUIFightVnC
 from cardio.tui.locations.upgraderview import TUIUpgraderView
 from cardio.tui.locations.skill_transferer_view import TUISkillTransfererView
 from cardio.tui.locations.skill_lottery_view import TUISkillLotteryView
+from cardio.tui.locations.bossfightview import TUIBossFightVnC
 
 view_directory = {
     NoLocation: None,
@@ -36,7 +40,9 @@ view_directory = {
     HealthUpgraderMultiLocation: TUIUpgraderView,
     SkillTransfererLocation: TUISkillTransfererView,
     SkillLotteryLocation: TUISkillLotteryView,
+    BossFightLocation: TUIBossFightVnC,
 }
 
 # ----- Sanity check -----
-assert set([loc for loc, _ in location_frequencies]) == set(view_directory.keys())
+# Note: BossFightLocation is not in location_frequencies since it's triggered by rung number
+assert set([loc for loc, _ in location_frequencies]) == set(view_directory.keys()) - {BossFightLocation}

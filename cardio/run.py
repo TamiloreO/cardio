@@ -41,8 +41,12 @@ class Run:
         self.current_index = loc.index
 
     def nof_locations(self, at_rung: int) -> int:
+        from cardio.locations.boss_fight_location import is_boss_rung
+
         assert at_rung >= 0
         if at_rung == 0:  # Always start with 1 location on rung 0
+            return 1
+        if is_boss_rung(at_rung):  # Boss rungs always have 1 location
             return 1
         random.seed(f"N{at_rung}_{self.base_seed}")
         return random.randint(1, 3)

@@ -45,6 +45,11 @@ def create_random_location(
 ) -> Location:
     # Importing these here to prevent circular imports:
     from .location_directory import location_frequencies
+    from .boss_fight_location import BossFightLocation, is_boss_rung
+
+    # Boss fights occur every 10 rungs
+    if is_boss_rung(rung):
+        return BossFightLocation(base_seed, rung, index, paths)
 
     random.seed(f"L{rung}_{index}_{base_seed}_locationfactory")
     locations, weights = zip(*location_frequencies)
