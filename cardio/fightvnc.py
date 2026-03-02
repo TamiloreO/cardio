@@ -201,6 +201,10 @@ class FightVnC:
         for card in cards:
             card.skills.call("post_round", card)
 
+        # Apply poison damage to poisoned cards on the grid:
+        for card in [c for line in self.grid.lines for c in line if c]:
+            card.apply_poison_damage()
+
         self.grid.log()
         logging.debug("----- End of round %s -----", self.round_num)
 

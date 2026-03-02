@@ -17,6 +17,7 @@ class FightCard(Card):
     vnc: ClassVar[FightVnC]
     grid: ClassVar[Grid]
     _orig: Card
+    is_poisoned: bool = False
 
     def __init__(self, *args, **kwargs):
         raise RuntimeError("Initializer disabled. Use `from_card()` instead.")
@@ -45,6 +46,7 @@ class FightCard(Card):
         assert isinstance(fc, FightCard)
         fc._orig = card
         fc._orig._fc = fc  # Just to have access to this in tests, e.g., in test_skills
+        fc.is_poisoned = False
         return fc
 
     @classmethod
@@ -127,6 +129,12 @@ class FightCard(Card):
     def heal_damage(self, howmuch: int) -> None:
         assert howmuch >= 0
         self.health = min(self.health + howmuch, self._orig.health)
+
+    def apply_poison_damage(self) -> None:
+        """Apply poison damage at the end of the turn if the card is poisoned."""
+        if self.is_poisoned:
+            logging.debug("%s takes 1 poison damage", self.name)
+            self.take_damage(1)
 
     def prepare(self) -> bool:
         """Prepare a card for attack by moving it from the prepline to the computer line.
@@ -246,6 +254,10 @@ class FightCard(Card):
         target_damage_left = target.take_damage(attacker_power)
         if target_damage_left > 0:
             self.vnc.handle_agent_damage(target_player, target_damage_left)
+
+        # Apply poison if attacker has poison skill and target is still alive:
+        if sk.Poison in self.skills and target.health > 0:
+            self.skills.get(sk.Poison).apply_poison(target)
 
         # Damage to attacker: (e.g., due to Spines)
         attacker_damage_left = self.take_damage(attacker_to_lose)

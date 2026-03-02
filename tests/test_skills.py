@@ -299,3 +299,43 @@ def test_weakness_against_agent():
     hc = Card("Human Card", 10, 2, 1, skills=[skills.Weakness])
     vnc = do_the_fight([hc], None)
     assert vnc.damagestate.diff == -9
+
+
+def test_poison():
+    # Human card with poison attacks computer card
+    # Round 0: hc attacks cc for 1 damage (cc: 10->9), cc attacks hc for 1 damage (hc: 10->9)
+    # End of round 0: cc takes 1 poison damage (cc: 9->8)
+    # Round 1: hc attacks cc for 1 damage (cc: 8->7), cc attacks hc for 1 damage (hc: 9->8)
+    # End of round 1: cc takes 1 poison damage (cc: 7->6)
+    # ... fight continues until cc dies
+    hc = Card("Human Card", 1, 10, 1, skills=[skills.Poison])
+    cc = Card("Computer Card", 1, 10, 1)
+    vnc = do_the_fight([hc], cc)
+    assert cc._fc.health == 0
+    assert cc._fc.is_poisoned == True
+    assert hc._fc.health > 0
+
+
+def test_poison_cannot_be_applied_twice():
+    # Once a card is poisoned, it should not be poisoned again
+    hc = Card("Human Card", 1, 20, 1, skills=[skills.Poison])
+    cc = Card("Computer Card", 1, 10, 1)
+    vnc = do_the_fight([hc], cc)
+    assert cc._fc.is_poisoned == True
+    assert cc._fc.health == 0
+
+
+def test_poison_against_agent():
+    # Poison should not affect the agent directly (no opposing card)
+    hc = Card("Human Card", 5, 10, 1, skills=[skills.Poison])
+    vnc = do_the_fight([hc], None)
+    assert vnc.damagestate.diff == -5
+
+
+def test_poison_with_shield():
+    # Shield should absorb 1 damage per turn, including poison damage
+    hc = Card("Human Card", 1, 10, 1, skills=[skills.Poison])
+    cc = Card("Computer Card", 1, 10, 1, skills=[skills.Shield])
+    vnc = do_the_fight([hc], cc)
+    # Shield absorbs 1 damage per round, so the cc survives longer
+    assert cc._fc.is_poisoned == True

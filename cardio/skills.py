@@ -320,6 +320,23 @@ class Weakness(Skill):
         return max(damage - 1, 0)
 
 
+@dataclass
+class Poison(Skill):
+    name: str = "Poison"
+    symbol: str = "☠️"
+    description: str = "A card with Poison will apply poison to any card it damages. Poisoned cards take 1 damage at the end of each turn. A card that is already poisoned cannot be poisoned again."
+    potency: int = 5
+
+    def apply_poison(self, target: FightCard) -> bool:
+        """Apply poison to the target card. Returns True if poison was applied."""
+        if target.is_poisoned:
+            logging.debug("%s is already poisoned, cannot poison again", target.name)
+            return False
+        target.is_poisoned = True
+        logging.debug("%s is now poisoned", target.name)
+        return True
+
+
 # ----- Sanity checks -----
 
 assert all(abs(cls.potency) <= 10 for cls in get_skilltypes())
