@@ -358,6 +358,12 @@ class Poison(Skill):
         if target is None:
             return
         # Guard: a card that is already poisoned cannot be poisoned again.
+        # NOTE: We use a dynamically-added `_poisoned` attribute on the target FightCard
+        # (monkey-patching) rather than a class-level field because: (1) poison status
+        # is per-card-instance and must persist even if the poisoning carrier dies or
+        # moves, (2) it allows multiple Poison skill instances (from different carriers)
+        # to coordinate without shared state, and (3) FightCard instances are ephemeral
+        # (created fresh each fight), so the attribute is automatically cleaned up.
         if getattr(target, "_poisoned", False):
             logging.debug(
                 "%s: %s is already poisoned, not applying Poison again",

@@ -3,6 +3,7 @@ from .fight_location import FightLocation
 from .no_location import NoLocation
 from .skill_transferer_location import SkillTransfererLocation
 from .skill_lottery_location import SkillLotteryLocation
+from .poison_location import PoisonLocation
 from .upgrader_location import (
     PowerUpgraderLocation,
     HealthUpgraderLocation,
@@ -19,6 +20,7 @@ location_frequencies = [  # 1 = "base" frequency
     (HealthUpgraderMultiLocation, 1),
     (SkillTransfererLocation, 1),
     (SkillLotteryLocation, 1),
+    (PoisonLocation, 1),
 ]
 
 # ----- Views -----
@@ -36,6 +38,7 @@ view_directory = {
     HealthUpgraderMultiLocation: TUIUpgraderView,
     SkillTransfererLocation: TUISkillTransfererView,
     SkillLotteryLocation: TUISkillLotteryView,
+    PoisonLocation: TUISkillLotteryView,  # Reuses SkillLotteryView (compatible interface)
 }
 
 # ----- Sanity check -----
