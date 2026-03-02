@@ -324,29 +324,34 @@ class Weakness(Skill):
 class Poison(Skill):
     """Damage-over-time (DOT) skill.
 
-    Implementation note — `_poisoned` attribute on `FightCard` targets:
-    ------------------------------------------------------------------
-    To enforce the rule "a card that is already poisoned cannot be poisoned again",
-    this skill tags the *target* `FightCard` instance with an ad-hoc boolean
-    attribute, `_poisoned`, via direct assignment (a.k.a. monkey-patching):
+    Implementation notes for developers
+    -----------------------------------
+    There are TWO pieces of "poisoned" state to be aware of here:
 
-        target._poisoned = True
+    1. `_poisoned_target` (declared field on this skill instance):
+       A reference from the *carrier's* Poison skill to the one `FightCard` it has
+       poisoned. This is what drives the per-turn damage tick in `post_round`, so the
+       DOT keeps working even if the poisoned card moves to a different slot or the
+       carrier leaves the grid. It is reset in `pre_fight`.
 
-    `_poisoned` is **not** declared on `Card` / `FightCard` and you will not find it
-    anywhere else in the codebase. It is a transient, fight-only flag that:
-      - lives on the `FightCard` object itself, so *any* Poison instance can see it
-        (this is what prevents a second Poison carrier from re-poisoning the same
-        target — `_poisoned_target` alone on the skill wouldn't be enough for that),
-      - is discarded automatically at the end of the fight because `FightCard`
-        instances are throwaways (see `FightCard.from_card`) and are never persisted
-        by `jason`,
-      - is read defensively with `getattr(target, "_poisoned", False)` so a target
-        that has never been poisoned simply looks "not poisoned".
+    2. `_poisoned` (NOT declared on `FightCard`; attached at runtime):
+       A simple boolean flag that gets *monkey-patched* onto the **target** `FightCard`
+       the first time it is poisoned (see `_try_apply` below). This acts as a global
+       "already poisoned" guard, ensuring poison cannot stack — neither from the same
+       carrier on subsequent turns, nor from a second carrier that also has Poison.
 
-    This keeps the skill fully self-contained (no edits to `FightCard` / `FightVnC`
-    required), following the "fully self-contained ⭐" implementation style.
-    If the `FightCard` class ever grows a formal status/condition system, this flag
-    should migrate there and the `getattr(...)` guard updated accordingly.
+       Why monkey-patching rather than a declared attribute on `Card`/`FightCard`?
+       - The flag is a *target-side* status effect, but skills in this codebase are
+         carrier-centric (hooks receive the carrier, state lives on the skill instance
+         of the carrier). Putting a `_poisoned` field on every `Card` just for this one
+         skill would couple `Card` to a specific skill's mechanics and would also need
+         its own reset logic.
+       - Because `FightCard`s are throwaway objects created fresh for each fight (see
+         `FightCard.from_card`), any `_poisoned` flag we attach is automatically
+         discarded at the end of the fight — no cleanup required, and it can never
+         leak into persisted `Card` state.
+       - We use `getattr(target, "_poisoned", False)` everywhere so the absence of the
+         attribute is safely treated as "not poisoned". Never read it directly.
     """
 
     name: str = "Poison"
@@ -385,10 +390,10 @@ class Poison(Skill):
         if target is None:
             return
         # Guard: a card that is already poisoned cannot be poisoned again.
-        # NOTE: `_poisoned` is a transient attribute we monkey-patch onto the target
-        # `FightCard` — it is not declared on the `Card`/`FightCard` classes. See the
-        # class docstring above for the rationale. Using `getattr(..., False)` means
-        # "treat absence of the flag as not-poisoned".
+        # NOTE: `_poisoned` is *not* a declared attribute on FightCard; it is attached
+        # at runtime (monkey-patched) on the target the first time it is poisoned.
+        # See the class docstring above for the full rationale. Always access it via
+        # `getattr(..., "_poisoned", False)` so missing == not poisoned.
         if getattr(target, "_poisoned", False):
             logging.debug(
                 "%s: %s is already poisoned, not applying Poison again",
@@ -396,11 +401,10 @@ class Poison(Skill):
                 target.name,
             )
             return
-        # Mark the target as poisoned. This attribute lives on the throwaway
-        # `FightCard`, so it naturally disappears at the end of the fight and is
-        # never persisted. We *also* remember the target on `self` so the DOT keeps
-        # ticking even if grid positions later change:
-        target._poisoned = True  # type: ignore[attr-defined]  # (see class docstring)
+        # Mark the target as poisoned and remember it so we keep ticking damage.
+        # This is the runtime attribute-attachment (monkey-patch) described above;
+        # it's deliberate and scoped to the throwaway FightCard instance only.
+        target._poisoned = True  # type: ignore[attr-defined]
         self._poisoned_target = target
         logging.debug("%s: %s is now poisoned", self.name, target.name)
 
