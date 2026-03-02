@@ -47,15 +47,19 @@ def test_move_to():
 
 
 def test_get_accessible_locations():
+    # Note: the expected ids below depend on `location_frequencies` in
+    # `location_directory.py`. Adding/removing/reordering entries there changes
+    # the weighted random selection for a given seed and will require this list
+    # to be regenerated.
     run = Run("0")
     run.current_rung = 2
     run.current_index = 2
     assert [l.id for l in run.get_accessible_locations(5)] == [
-        "UH*_3_1",
-        "···_4_0",
+        "S→→_3_1",
+        "FFF_4_0",
         "FFF_5_0",
         "···_5_1",
-        "UHU_5_2",
+        "UP*_5_2",
         "FFF_6_0",
         "···_6_1",
         "UHU_7_0",
@@ -63,10 +67,14 @@ def test_get_accessible_locations():
 
 
 def test_run_pattern():
+    # Note: the location markers in the target map below depend on
+    # `location_frequencies` in `location_directory.py`. Adding/removing/reordering
+    # entries there changes the weighted random selection for a given seed and will
+    # require this target string to be regenerated.
     run = Run("0")
 
     target = """\
-···               UH*     ← 3
+FFF               S→→     ← 3
  ||                | 
  ||                | 
  |+-------+        | 
@@ -78,7 +86,7 @@ UPU      FFF      ···     ← 2
  +-------+++-------+ 
          |||         
          |||         
-         UPU              ← 1
+         UHU              ← 1
           |          
           |          
           |          

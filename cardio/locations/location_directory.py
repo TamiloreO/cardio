@@ -3,7 +3,7 @@ from .fight_location import FightLocation
 from .no_location import NoLocation
 from .skill_transferer_location import SkillTransfererLocation
 from .skill_lottery_location import SkillLotteryLocation
-from .poison_shop_location import PoisonShopLocation
+from .poison_skill_location import PoisonSkillLocation
 from .upgrader_location import (
     PowerUpgraderLocation,
     HealthUpgraderLocation,
@@ -20,7 +20,7 @@ location_frequencies = [  # 1 = "base" frequency
     (HealthUpgraderMultiLocation, 1),
     (SkillTransfererLocation, 1),
     (SkillLotteryLocation, 1),
-    (PoisonShopLocation, 1),
+    (PoisonSkillLocation, 1),
 ]
 
 # ----- Views -----
@@ -38,9 +38,9 @@ view_directory = {
     HealthUpgraderMultiLocation: TUIUpgraderView,
     SkillTransfererLocation: TUISkillTransfererView,
     SkillLotteryLocation: TUISkillLotteryView,
-    # PoisonShopLocation reuses the skill-lottery TUI view, since its protocol
-    # (`PoisonShopView`: pick + show_upgrade + message/error/close) matches exactly:
-    PoisonShopLocation: TUISkillLotteryView,
+    # PoisonSkillLocation reuses the skill-lottery TUI view because its protocol
+    # (`pick(activecards)` + `show_upgrade(card)`) is identical. No new TUI code needed.
+    PoisonSkillLocation: TUISkillLotteryView,
 }
 
 # ----- Sanity check -----
