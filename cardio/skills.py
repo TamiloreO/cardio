@@ -320,6 +320,84 @@ class Weakness(Skill):
         return max(damage - 1, 0)
 
 
+@dataclass
+class Poison(Skill):
+    name: str = "Poison"
+    symbol: str = "🐍"
+    description: str = (
+        "A card with Poison poisons the opposing card. A poisoned card takes 1 damage "
+        "at the end of each turn for the rest of the fight. A card that is already "
+        "poisoned cannot be poisoned again. If there is no opposing card, Poison has "
+        "no effect."
+    )
+    potency: int = 4
+    # Track the card that has been poisoned by this skill (if any) across turns so that
+    # damage-over-time (DOT) continues to tick even if the poisoned card later moves
+    # out of the opposing slot (or the carrier itself moves/leaves the grid):
+    _poisoned_target: Optional["FightCard"] = None
+
+    def pre_fight(self, carrier: "FightCard") -> None:
+        # Reset state at the start of every fight so that poison applied in a previous
+        # fight does not carry over.
+        self._poisoned_target = None
+
+    def _try_apply(self, carrier: "FightCard") -> None:
+        """Try to poison the card opposing `carrier`.
+
+        A target can only be poisoned once: if it is already poisoned (i.e. already
+        carries a `_poisoned` marker that is `True`), applying poison again is a no-op.
+        This guards against both re-applying poison from the same carrier and a second
+        carrier with Poison trying to poison the same target.
+        """
+        # The carrier might not be on the grid (e.g. still in hand / draw deck) when
+        # `post_round` fires. Only cards that are actually placed on the grid and have
+        # an opposing card can poison:
+        if carrier.grid.find_card(carrier) is None:
+            return
+        target = carrier.grid.get_opposing_card(carrier)
+        if target is None:
+            return
+        # Guard: a card that is already poisoned cannot be poisoned again.
+        if getattr(target, "_poisoned", False):
+            logging.debug(
+                "%s: %s is already poisoned, not applying Poison again",
+                self.name,
+                target.name,
+            )
+            return
+        # Mark the target as poisoned and remember it so we keep ticking damage:
+        target._poisoned = True  # type: ignore[attr-defined]
+        self._poisoned_target = target
+        logging.debug("%s: %s is now poisoned", self.name, target.name)
+
+    def post_round(self, carrier: "FightCard") -> None:
+        # First, try to (newly) apply poison to whatever card currently opposes the
+        # carrier. This is idempotent thanks to the `_poisoned` guard above.
+        self._try_apply(carrier)
+
+        # Then, tick poison damage on a previously poisoned target. We track the target
+        # on the skill (rather than relying on it still being the opposing card) so
+        # that the DOT keeps ticking across turns even if positions change.
+        target = self._poisoned_target
+        if target is None:
+            return
+        # Stop tracking if the target has died / has 0 health already:
+        if target.health <= 0:
+            self._poisoned_target = None
+            return
+        # Stop tracking if the target is no longer on the grid (already removed /
+        # sacrificed). `take_damage` -> `die` requires the card to be on the grid.
+        if target.grid.find_card(target) is None:
+            self._poisoned_target = None
+            return
+        logging.debug("%s: %s takes 1D (poison DOT)", self.name, target.name)
+        target.take_damage(1)
+        # If the poison tick killed the target, forget it so we can potentially poison
+        # a new opposing card in a subsequent round:
+        if target.health <= 0:
+            self._poisoned_target = None
+
+
 # ----- Sanity checks -----
 
 assert all(abs(cls.potency) <= 10 for cls in get_skilltypes())
